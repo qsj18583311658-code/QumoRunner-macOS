@@ -1,0 +1,1208 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		01559A05497EA6CF0FC9761A /* AccountInsightParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546E4982D13ACFC1514AEC10 /* AccountInsightParserTests.swift */; };
+		0161160F3067518505083586 /* QumoRunnerAgentMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009892DC579B3109CEEAA4B3 /* QumoRunnerAgentMain.swift */; };
+		026A6D9C2DDD9E6A1DE79B03 /* DiagnosticExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E795BA97A6C60318C01E302 /* DiagnosticExporter.swift */; };
+		0669BBFD06F3143DAF3BE885 /* RunnerAgentProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914728211E5A7CF33B77AD77 /* RunnerAgentProtocol.swift */; };
+		0A0A676194887411CA913615 /* QumoRunnerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832583503CDD49D35216046 /* QumoRunnerApp.swift */; };
+		0A1081864D8E654CB1910E19 /* ModelCatalogParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AE501F0325730682F7670EF /* ModelCatalogParserTests.swift */; };
+		0C2EEF61D2385B35C956AADC /* AccountInsightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA16B29DFC7BA9471F1FB20 /* AccountInsightStore.swift */; };
+		0CE0AAF6FFD6BF2D9E07730B /* RunnerAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8073E8913127E06FA75E4614 /* RunnerAPI.swift */; };
+		0F48EC2F89D0B71456D38139 /* RunnerAgentProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46C1FAA142D66ECD335478A0 /* RunnerAgentProtocol.swift */; };
+		109FFFE6328F9C56E57C7402 /* libRunnerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */; };
+		16AF1B7369DFEF44C5369624 /* ModelCatalogHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E27150120C56A11D616601 /* ModelCatalogHeader.swift */; };
+		18F5FF3F5E815658D1C99345 /* ModelCatalogTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32669BE8EBC795EF0D6656CD /* ModelCatalogTypes.swift */; };
+		1C16A7C15E236DD3AEAEBDD6 /* AccountInsightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC31FD72308126783A9C23BD /* AccountInsightModels.swift */; };
+		231C3DA726A287B038AE882D /* AgentProfileRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9318561368011A28345FBC8 /* AgentProfileRegistry.swift */; };
+		28CFD131DDEDA61D1113B38A /* AgentSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45367E9803C24095B2EC8E18 /* AgentSnapshot.swift */; };
+		2B9C8C831659611EDD0A44CF /* LibTVLoginSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5E6A2836964F8F140E5B25 /* LibTVLoginSupport.swift */; };
+		2BC02F12B5BC05687468DB79 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562F8942EB1A2BA6E71FBEDB /* LogsView.swift */; };
+		2DCD78F96DFD92ABE321B709 /* RunnerNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4525D81F6E1D7075FF070977 /* RunnerNotificationService.swift */; };
+		2EC892D47619EF4F31B0C701 /* RunnerUIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB03DD1B3B5935F67D2E652 /* RunnerUIModels.swift */; };
+		3275F61935CEAC9F020E50F2 /* RunnerConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ECD4B49BC144AE7096CE1C8 /* RunnerConfigurationStore.swift */; };
+		34224668129AF54BE5EE6E71 /* OperationalComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F293A00E27363E2FE72CF88 /* OperationalComponents.swift */; };
+		35E356EB891BCF767D8A6684 /* RunnerAgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C37508BCD651B955E68A24 /* RunnerAgentService.swift */; };
+		3D6EC3B7005AD7EDCF4D4EA5 /* libRunnerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */; };
+		44CFC04CED630C88494EEADD /* JobsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFAA5DB8EF798A3B241CE86 /* JobsView.swift */; };
+		5176B6302864FC6BBC997D92 /* SubmissionExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90554A020FCD56A401BC418 /* SubmissionExecutor.swift */; };
+		583BA1A6E23B5AD4239BF60C /* AgentConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2EA5C62DD9E9FDE5A2B4B0 /* AgentConfigurationStore.swift */; };
+		5AC07E2F5712836D28344AB0 /* PairingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7479D8216BA1F6E6B3F096 /* PairingService.swift */; };
+		5B02480DD02D0AF193AFA672 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B912E525D3560C768625FE5 /* KeychainStore.swift */; };
+		5EACD27713CD4636B87BAC8E /* ArtifactArchiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176E9DAD904B68B3BBAC1802 /* ArtifactArchiver.swift */; };
+		60C78A1207D390E0BEF21A54 /* QuotaStateCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D2B3F2BB97094CB1899661 /* QuotaStateCopyTests.swift */; };
+		60D4E47103AE0E60127F7EEE /* LibTVLoginSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B5E6A2836964F8F140E5B25 /* LibTVLoginSupport.swift */; };
+		67B1E2DBC31BD74EBCEFA990 /* GenerationSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAA9A7DB4D5E2C6F48BFDF39 /* GenerationSpec.swift */; };
+		743CF249E3BB4CE373C0465B /* AgentAPITransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B5D04F17A919C087031A0B4 /* AgentAPITransport.swift */; };
+		78C4C95A20A45A670137BB73 /* GlobalModelCatalogRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA79113206D257E2AE6142C /* GlobalModelCatalogRow.swift */; };
+		79E9DF15DC5721512278F110 /* RunnerAppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92337B29C7EA9E6EFE84531E /* RunnerAppStore.swift */; };
+		7A761E8D8F0AB0A52257BAC0 /* AgentConfigurationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2EA5C62DD9E9FDE5A2B4B0 /* AgentConfigurationStore.swift */; };
+		7B3D3AB766270F4A2AE070A3 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE6ED9738320C81389C4078 /* OverviewView.swift */; };
+		82659CD969A32FF776AD621E /* AccountInsightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA16B29DFC7BA9471F1FB20 /* AccountInsightStore.swift */; };
+		832FCF6BEFB46EC0539FC913 /* com.qumo.runner.agent.plist in CopyFiles */ = {isa = PBXBuildFile; fileRef = 1C4FF731A2C2F424B1200A97 /* com.qumo.runner.agent.plist */; };
+		83D8CDF26BDAE3AFBEB04ADB /* ModelCatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A67FD94C35A5EFC2ACAD71 /* ModelCatalogService.swift */; };
+		87416A23F4562F084498ED4D /* libRunnerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */; };
+		890ED89C1565A333E4C831FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E8FFF03AFA77C5AD8A7C6E3 /* SettingsView.swift */; };
+		8E2A0CC472FE52689391792D /* AgentRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E9EFF34B0E40C608EBD381 /* AgentRuntime.swift */; };
+		8F433285760302EF718FE44A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 834F01549D9726CA3E521ADE /* Assets.xcassets */; };
+		9059BCEB52AAA411076B8944 /* AccountConcurrencyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A4287C4DBF4C114418D5E9 /* AccountConcurrencyPolicyTests.swift */; };
+		912C57AB97EE4583DB669917 /* ConcurrencyLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D9BC9EBE40C7AA64AA5B6B /* ConcurrencyLimiter.swift */; };
+		91714B457C51669A4538F080 /* ModelCatalogManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4003146D58A1649B2F8AE70C /* ModelCatalogManagerView.swift */; };
+		9246749FA4F3CCDF74D1B72C /* AccountInsightParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B026ECFF3C096645900AE3E /* AccountInsightParsing.swift */; };
+		92562BDF378F3FBEF6ED8755 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6B2FD37CEFF76F96489ED2 /* RootView.swift */; };
+		9350452DC7A53309CB1EB731 /* AccountInsightStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A9D79F5E0FAD03C0377D09 /* AccountInsightStoreTests.swift */; };
+		96028CB463EB995CB9937CEF /* RunnerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3BCB1A1069BEFAF5CF6BAD5 /* RunnerEngine.swift */; };
+		983704CC6BC431F269916AD9 /* libRunnerCore.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */; };
+		A2013FBF081A323BED55B8C9 /* ProfileStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E4E200F05AD1749524464D8 /* ProfileStorage.swift */; };
+		A8F30C7BB106D0C2E591D2C8 /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BC680B800D1A8B629EC1E7A /* AccountsView.swift */; };
+		A933044E42232CCD179FF357 /* LoginSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50123C8C9E46C2E000AED4A /* LoginSessionCoordinator.swift */; };
+		AC49915C08D6A8F0E9A11574 /* RunnerUIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB03DD1B3B5935F67D2E652 /* RunnerUIModels.swift */; };
+		AE0B6D767B93CE135BF94B42 /* LibTVOutputParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3C51D17E9BB57288FBC0960 /* LibTVOutputParser.swift */; };
+		AF667A6E3EDAB7273EC96D93 /* AccountInsightCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F4BF09391096A54E649CAFB /* AccountInsightCoordinator.swift */; };
+		B20A950ACFB1646F7379604A /* AccountInsightParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B026ECFF3C096645900AE3E /* AccountInsightParsing.swift */; };
+		B30C9F3B224BA46727D75734 /* ModelCatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A67FD94C35A5EFC2ACAD71 /* ModelCatalogService.swift */; };
+		B9BC81F10658EED129DC577F /* LaunchAgentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F56CB818F16212BBDB027F7 /* LaunchAgentManager.swift */; };
+		BC53F06D65D0595F94481E0B /* AgentProfileRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F74034321997DC29D5BBC91 /* AgentProfileRegistryTests.swift */; };
+		BF0B812839889C9526F9FF11 /* SubmissionJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 207C98CFDCA6F621830B3980 /* SubmissionJournal.swift */; };
+		D196E30B541A3800CC6228C9 /* RunnerAgentClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18706D1F76B3E883E717AE3 /* RunnerAgentClient.swift */; };
+		D3F879F4D84B999E0A377BF4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1B565FC71B1E9985718967 /* Models.swift */; };
+		D658BEDBB75420DBFD53B900 /* LibTVGenerationExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA250F1E57420A25ECA8A22B /* LibTVGenerationExecution.swift */; };
+		DC39DE15D7D01FCEC0430A8D /* AgentSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45367E9803C24095B2EC8E18 /* AgentSnapshot.swift */; };
+		DC661E94288C47700A4674E9 /* LibTVLoginSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F05A4AEEA3980B10A771717 /* LibTVLoginSupportTests.swift */; };
+		E5E91039323F25AD7B271452 /* ChromeAuthorizationLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170A95212573988378BB92AC /* ChromeAuthorizationLauncher.swift */; };
+		E7DB5F3EB3F86339D49D95A5 /* LibTVProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF9769139C6866AC09C7E34 /* LibTVProcess.swift */; };
+		ED63AB10E19FC943F7666D85 /* AccountProfileAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510918E6969425684AF91BCA /* AccountProfileAPIService.swift */; };
+		F70C4E5350A69521A3945477 /* LibTVBinaryVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB4F52D47B5E28AFFD0F34EB /* LibTVBinaryVerifier.swift */; };
+		FAAEAC1131AFF02C4D3E2260 /* AgentProfileRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9318561368011A28345FBC8 /* AgentProfileRegistry.swift */; };
+		FC6F146AA1A66B3D6940E9AF /* AccountInsightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC31FD72308126783A9C23BD /* AccountInsightModels.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		73E2ED299806250283F0F381 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F682D6390E36B37833874AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 60EFF2797B114B9DA9E56AE1;
+			remoteInfo = QumoRunnerAgent;
+		};
+		A2930004492E52A3F5FFC575 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F682D6390E36B37833874AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1AF4B317C5436E2A85AC851;
+			remoteInfo = RunnerCore;
+		};
+		BC104BC32B8CFFCA01FEC2CB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F682D6390E36B37833874AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1AF4B317C5436E2A85AC851;
+			remoteInfo = RunnerCore;
+		};
+		CAAA55B40C925491F83A2233 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F682D6390E36B37833874AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1AF4B317C5436E2A85AC851;
+			remoteInfo = RunnerCore;
+		};
+		D978B6C953E487BE3B4E1C47 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5F682D6390E36B37833874AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1AF4B317C5436E2A85AC851;
+			remoteInfo = RunnerCore;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		104247201836B5E3290407F8 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchAgents;
+			dstSubfolderSpec = 1;
+			files = (
+				832FCF6BEFB46EC0539FC913 /* com.qumo.runner.agent.plist in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		009892DC579B3109CEEAA4B3 /* QumoRunnerAgentMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QumoRunnerAgentMain.swift; sourceTree = "<group>"; };
+		019437D38D4DC8680900CAC1 /* QumoRunnerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QumoRunnerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0832583503CDD49D35216046 /* QumoRunnerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QumoRunnerApp.swift; sourceTree = "<group>"; };
+		0F56CB818F16212BBDB027F7 /* LaunchAgentManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAgentManager.swift; sourceTree = "<group>"; };
+		0F74034321997DC29D5BBC91 /* AgentProfileRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfileRegistryTests.swift; sourceTree = "<group>"; };
+		13C37508BCD651B955E68A24 /* RunnerAgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAgentService.swift; sourceTree = "<group>"; };
+		170A95212573988378BB92AC /* ChromeAuthorizationLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeAuthorizationLauncher.swift; sourceTree = "<group>"; };
+		176E9DAD904B68B3BBAC1802 /* ArtifactArchiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactArchiver.swift; sourceTree = "<group>"; };
+		1AE501F0325730682F7670EF /* ModelCatalogParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogParserTests.swift; sourceTree = "<group>"; };
+		1B026ECFF3C096645900AE3E /* AccountInsightParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightParsing.swift; sourceTree = "<group>"; };
+		1B5E6A2836964F8F140E5B25 /* LibTVLoginSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVLoginSupport.swift; sourceTree = "<group>"; };
+		1C4FF731A2C2F424B1200A97 /* com.qumo.runner.agent.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = com.qumo.runner.agent.plist; sourceTree = "<group>"; };
+		207C98CFDCA6F621830B3980 /* SubmissionJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubmissionJournal.swift; sourceTree = "<group>"; };
+		25D2B3F2BB97094CB1899661 /* QuotaStateCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaStateCopyTests.swift; sourceTree = "<group>"; };
+		2BC680B800D1A8B629EC1E7A /* AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsView.swift; sourceTree = "<group>"; };
+		2E8FFF03AFA77C5AD8A7C6E3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		2F05A4AEEA3980B10A771717 /* LibTVLoginSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVLoginSupportTests.swift; sourceTree = "<group>"; };
+		32669BE8EBC795EF0D6656CD /* ModelCatalogTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogTypes.swift; sourceTree = "<group>"; };
+		327C36912846B313B1A1BCAB /* QumoRunnerAgent */ = {isa = PBXFileReference; includeInIndex = 0; path = QumoRunnerAgent; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E6B2FD37CEFF76F96489ED2 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		3F293A00E27363E2FE72CF88 /* OperationalComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalComponents.swift; sourceTree = "<group>"; };
+		4003146D58A1649B2F8AE70C /* ModelCatalogManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogManagerView.swift; sourceTree = "<group>"; };
+		4525D81F6E1D7075FF070977 /* RunnerNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerNotificationService.swift; sourceTree = "<group>"; };
+		45367E9803C24095B2EC8E18 /* AgentSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSnapshot.swift; sourceTree = "<group>"; };
+		46C1FAA142D66ECD335478A0 /* RunnerAgentProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAgentProtocol.swift; sourceTree = "<group>"; };
+		4B5D04F17A919C087031A0B4 /* AgentAPITransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentAPITransport.swift; sourceTree = "<group>"; };
+		4E4E200F05AD1749524464D8 /* ProfileStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStorage.swift; sourceTree = "<group>"; };
+		510918E6969425684AF91BCA /* AccountProfileAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountProfileAPIService.swift; sourceTree = "<group>"; };
+		546E4982D13ACFC1514AEC10 /* AccountInsightParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightParserTests.swift; sourceTree = "<group>"; };
+		562F8942EB1A2BA6E71FBEDB /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		56A67FD94C35A5EFC2ACAD71 /* ModelCatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogService.swift; sourceTree = "<group>"; };
+		5CFAA5DB8EF798A3B241CE86 /* JobsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsView.swift; sourceTree = "<group>"; };
+		6B2EA5C62DD9E9FDE5A2B4B0 /* AgentConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentConfigurationStore.swift; sourceTree = "<group>"; };
+		6E795BA97A6C60318C01E302 /* DiagnosticExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticExporter.swift; sourceTree = "<group>"; };
+		6ECD4B49BC144AE7096CE1C8 /* RunnerConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerConfigurationStore.swift; sourceTree = "<group>"; };
+		7B912E525D3560C768625FE5 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		7CB03DD1B3B5935F67D2E652 /* RunnerUIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerUIModels.swift; sourceTree = "<group>"; };
+		8073E8913127E06FA75E4614 /* RunnerAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAPI.swift; sourceTree = "<group>"; };
+		80CD5BCE0656C99D5C77B0CF /* QumoRunnerAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QumoRunnerAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		834F01549D9726CA3E521ADE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		914728211E5A7CF33B77AD77 /* RunnerAgentProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAgentProtocol.swift; sourceTree = "<group>"; };
+		92337B29C7EA9E6EFE84531E /* RunnerAppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAppStore.swift; sourceTree = "<group>"; };
+		9CA79113206D257E2AE6142C /* GlobalModelCatalogRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalModelCatalogRow.swift; sourceTree = "<group>"; };
+		9F4BF09391096A54E649CAFB /* AccountInsightCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightCoordinator.swift; sourceTree = "<group>"; };
+		A6E27150120C56A11D616601 /* ModelCatalogHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogHeader.swift; sourceTree = "<group>"; };
+		AB4F52D47B5E28AFFD0F34EB /* LibTVBinaryVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVBinaryVerifier.swift; sourceTree = "<group>"; };
+		B8D9BC9EBE40C7AA64AA5B6B /* ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcurrencyLimiter.swift; sourceTree = "<group>"; };
+		B9318561368011A28345FBC8 /* AgentProfileRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProfileRegistry.swift; sourceTree = "<group>"; };
+		BA250F1E57420A25ECA8A22B /* LibTVGenerationExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVGenerationExecution.swift; sourceTree = "<group>"; };
+		BAF9769139C6866AC09C7E34 /* LibTVProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVProcess.swift; sourceTree = "<group>"; };
+		C3BCB1A1069BEFAF5CF6BAD5 /* RunnerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerEngine.swift; sourceTree = "<group>"; };
+		C7A4287C4DBF4C114418D5E9 /* AccountConcurrencyPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountConcurrencyPolicyTests.swift; sourceTree = "<group>"; };
+		DAA9A7DB4D5E2C6F48BFDF39 /* GenerationSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationSpec.swift; sourceTree = "<group>"; };
+		DBA16B29DFC7BA9471F1FB20 /* AccountInsightStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightStore.swift; sourceTree = "<group>"; };
+		DC1B565FC71B1E9985718967 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		E18706D1F76B3E883E717AE3 /* RunnerAgentClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAgentClient.swift; sourceTree = "<group>"; };
+		E2A9D79F5E0FAD03C0377D09 /* AccountInsightStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightStoreTests.swift; sourceTree = "<group>"; };
+		E3C51D17E9BB57288FBC0960 /* LibTVOutputParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVOutputParser.swift; sourceTree = "<group>"; };
+		E5E9EFF34B0E40C608EBD381 /* AgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntime.swift; sourceTree = "<group>"; };
+		E90554A020FCD56A401BC418 /* SubmissionExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubmissionExecutor.swift; sourceTree = "<group>"; };
+		ED7479D8216BA1F6E6B3F096 /* PairingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingService.swift; sourceTree = "<group>"; };
+		F50123C8C9E46C2E000AED4A /* LoginSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginSessionCoordinator.swift; sourceTree = "<group>"; };
+		FC31FD72308126783A9C23BD /* AccountInsightModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightModels.swift; sourceTree = "<group>"; };
+		FDE6ED9738320C81389C4078 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		FEA372EE64EBE42C87617AFB /* QumoRunnerAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = QumoRunnerAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libRunnerCore.a; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5342911B43995EBC6C59D8A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				109FFFE6328F9C56E57C7402 /* libRunnerCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		58F11BCFABD72DB7E7466F76 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87416A23F4562F084498ED4D /* libRunnerCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8638245305340F1B82BB5FF6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3D6EC3B7005AD7EDCF4D4EA5 /* libRunnerCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9B3588A3B5525A53BB207D78 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				983704CC6BC431F269916AD9 /* libRunnerCore.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		00E9B050492CAB1578317D0C /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				9CA79113206D257E2AE6142C /* GlobalModelCatalogRow.swift */,
+				A6E27150120C56A11D616601 /* ModelCatalogHeader.swift */,
+				32669BE8EBC795EF0D6656CD /* ModelCatalogTypes.swift */,
+				3F293A00E27363E2FE72CF88 /* OperationalComponents.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		16417500029DA8128D5FF163 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				834F01549D9726CA3E521ADE /* Assets.xcassets */,
+				1C4FF731A2C2F424B1200A97 /* com.qumo.runner.agent.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		1EA16B93EB3B02959E5719F8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */,
+				327C36912846B313B1A1BCAB /* QumoRunnerAgent */,
+				FEA372EE64EBE42C87617AFB /* QumoRunnerAgentTests.xctest */,
+				019437D38D4DC8680900CAC1 /* QumoRunnerApp.app */,
+				80CD5BCE0656C99D5C77B0CF /* QumoRunnerAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1F43F21CBED4844D6F6F5CB9 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				9F4BF09391096A54E649CAFB /* AccountInsightCoordinator.swift */,
+				1B026ECFF3C096645900AE3E /* AccountInsightParsing.swift */,
+				DBA16B29DFC7BA9471F1FB20 /* AccountInsightStore.swift */,
+				510918E6969425684AF91BCA /* AccountProfileAPIService.swift */,
+				4B5D04F17A919C087031A0B4 /* AgentAPITransport.swift */,
+				6B2EA5C62DD9E9FDE5A2B4B0 /* AgentConfigurationStore.swift */,
+				B9318561368011A28345FBC8 /* AgentProfileRegistry.swift */,
+				E5E9EFF34B0E40C608EBD381 /* AgentRuntime.swift */,
+				1B5E6A2836964F8F140E5B25 /* LibTVLoginSupport.swift */,
+				F50123C8C9E46C2E000AED4A /* LoginSessionCoordinator.swift */,
+				56A67FD94C35A5EFC2ACAD71 /* ModelCatalogService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		3A2EFFFF4B327C852FAFE18A /* QumoRunnerAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				25D2B3F2BB97094CB1899661 /* QuotaStateCopyTests.swift */,
+			);
+			path = QumoRunnerAppTests;
+			sourceTree = "<group>";
+		};
+		777C210AB81C9E3E4BC87A66 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				170A95212573988378BB92AC /* ChromeAuthorizationLauncher.swift */,
+				6E795BA97A6C60318C01E302 /* DiagnosticExporter.swift */,
+				7B912E525D3560C768625FE5 /* KeychainStore.swift */,
+				0F56CB818F16212BBDB027F7 /* LaunchAgentManager.swift */,
+				ED7479D8216BA1F6E6B3F096 /* PairingService.swift */,
+				6ECD4B49BC144AE7096CE1C8 /* RunnerConfigurationStore.swift */,
+				4525D81F6E1D7075FF070977 /* RunnerNotificationService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		9312BF1B7EBF8E010D782FDD /* XPC */ = {
+			isa = PBXGroup;
+			children = (
+				46C1FAA142D66ECD335478A0 /* RunnerAgentProtocol.swift */,
+				13C37508BCD651B955E68A24 /* RunnerAgentService.swift */,
+			);
+			path = XPC;
+			sourceTree = "<group>";
+		};
+		A6EE019085F7D40827271AE7 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				DE10FE564EB758F8655DAB63 /* QumoRunnerAgent */,
+				B2012457F0E672E84303134A /* QumoRunnerApp */,
+				EC10B21728C174D24C867F85 /* RunnerCore */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		ACB7C4D9E61708B254A68BCD /* XPC */ = {
+			isa = PBXGroup;
+			children = (
+				E18706D1F76B3E883E717AE3 /* RunnerAgentClient.swift */,
+				914728211E5A7CF33B77AD77 /* RunnerAgentProtocol.swift */,
+			);
+			path = XPC;
+			sourceTree = "<group>";
+		};
+		B2012457F0E672E84303134A /* QumoRunnerApp */ = {
+			isa = PBXGroup;
+			children = (
+				FE5FD76D8B45C4ECDE0BEC32 /* App */,
+				FC555246238A816CE79C3254 /* Models */,
+				777C210AB81C9E3E4BC87A66 /* Services */,
+				F85B04971542E4A4EDF0BDFA /* Views */,
+				ACB7C4D9E61708B254A68BCD /* XPC */,
+			);
+			path = QumoRunnerApp;
+			sourceTree = "<group>";
+		};
+		CD3F6ACFA11BDC2BE8571618 /* QumoRunnerAgentTests */ = {
+			isa = PBXGroup;
+			children = (
+				C7A4287C4DBF4C114418D5E9 /* AccountConcurrencyPolicyTests.swift */,
+				546E4982D13ACFC1514AEC10 /* AccountInsightParserTests.swift */,
+				E2A9D79F5E0FAD03C0377D09 /* AccountInsightStoreTests.swift */,
+				0F74034321997DC29D5BBC91 /* AgentProfileRegistryTests.swift */,
+				2F05A4AEEA3980B10A771717 /* LibTVLoginSupportTests.swift */,
+				1AE501F0325730682F7670EF /* ModelCatalogParserTests.swift */,
+			);
+			path = QumoRunnerAgentTests;
+			sourceTree = "<group>";
+		};
+		DE10FE564EB758F8655DAB63 /* QumoRunnerAgent */ = {
+			isa = PBXGroup;
+			children = (
+				F7756DBDF23D56DF675412BD /* App */,
+				F91F3CFF8995BE14830A6485 /* Models */,
+				1F43F21CBED4844D6F6F5CB9 /* Services */,
+				9312BF1B7EBF8E010D782FDD /* XPC */,
+			);
+			path = QumoRunnerAgent;
+			sourceTree = "<group>";
+		};
+		E49AC3C5A27E93FD92BDCB26 = {
+			isa = PBXGroup;
+			children = (
+				16417500029DA8128D5FF163 /* Resources */,
+				A6EE019085F7D40827271AE7 /* Sources */,
+				F1E2D075606346AD1E543584 /* Tests */,
+				1EA16B93EB3B02959E5719F8 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EC10B21728C174D24C867F85 /* RunnerCore */ = {
+			isa = PBXGroup;
+			children = (
+				176E9DAD904B68B3BBAC1802 /* ArtifactArchiver.swift */,
+				B8D9BC9EBE40C7AA64AA5B6B /* ConcurrencyLimiter.swift */,
+				DAA9A7DB4D5E2C6F48BFDF39 /* GenerationSpec.swift */,
+				AB4F52D47B5E28AFFD0F34EB /* LibTVBinaryVerifier.swift */,
+				BA250F1E57420A25ECA8A22B /* LibTVGenerationExecution.swift */,
+				E3C51D17E9BB57288FBC0960 /* LibTVOutputParser.swift */,
+				BAF9769139C6866AC09C7E34 /* LibTVProcess.swift */,
+				DC1B565FC71B1E9985718967 /* Models.swift */,
+				4E4E200F05AD1749524464D8 /* ProfileStorage.swift */,
+				8073E8913127E06FA75E4614 /* RunnerAPI.swift */,
+				C3BCB1A1069BEFAF5CF6BAD5 /* RunnerEngine.swift */,
+				E90554A020FCD56A401BC418 /* SubmissionExecutor.swift */,
+				207C98CFDCA6F621830B3980 /* SubmissionJournal.swift */,
+			);
+			path = RunnerCore;
+			sourceTree = "<group>";
+		};
+		F1E2D075606346AD1E543584 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				CD3F6ACFA11BDC2BE8571618 /* QumoRunnerAgentTests */,
+				3A2EFFFF4B327C852FAFE18A /* QumoRunnerAppTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		F7756DBDF23D56DF675412BD /* App */ = {
+			isa = PBXGroup;
+			children = (
+				009892DC579B3109CEEAA4B3 /* QumoRunnerAgentMain.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		F85B04971542E4A4EDF0BDFA /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				2BC680B800D1A8B629EC1E7A /* AccountsView.swift */,
+				5CFAA5DB8EF798A3B241CE86 /* JobsView.swift */,
+				562F8942EB1A2BA6E71FBEDB /* LogsView.swift */,
+				4003146D58A1649B2F8AE70C /* ModelCatalogManagerView.swift */,
+				FDE6ED9738320C81389C4078 /* OverviewView.swift */,
+				3E6B2FD37CEFF76F96489ED2 /* RootView.swift */,
+				2E8FFF03AFA77C5AD8A7C6E3 /* SettingsView.swift */,
+				00E9B050492CAB1578317D0C /* Components */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F91F3CFF8995BE14830A6485 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				FC31FD72308126783A9C23BD /* AccountInsightModels.swift */,
+				45367E9803C24095B2EC8E18 /* AgentSnapshot.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		FC555246238A816CE79C3254 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				7CB03DD1B3B5935F67D2E652 /* RunnerUIModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		FE5FD76D8B45C4ECDE0BEC32 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				0832583503CDD49D35216046 /* QumoRunnerApp.swift */,
+				92337B29C7EA9E6EFE84531E /* RunnerAppStore.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2D34C7D0915D9F530305EB27 /* QumoRunnerAgentTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ACB0E4419CC350306223F0B8 /* Build configuration list for PBXNativeTarget "QumoRunnerAgentTests" */;
+			buildPhases = (
+				122278D0F53AB1B3556BF416 /* Sources */,
+				8638245305340F1B82BB5FF6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ACAA5BD3D86AF76FF2C7B596 /* PBXTargetDependency */,
+			);
+			name = QumoRunnerAgentTests;
+			packageProductDependencies = (
+			);
+			productName = QumoRunnerAgentTests;
+			productReference = FEA372EE64EBE42C87617AFB /* QumoRunnerAgentTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		3D5A785C72084390C4B0A593 /* QumoRunnerAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B8A83022BC4B581726192C4C /* Build configuration list for PBXNativeTarget "QumoRunnerAppTests" */;
+			buildPhases = (
+				54930F288E80F787EC2ED04C /* Sources */,
+				5342911B43995EBC6C59D8A6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BB7F4906E462416CF9F3BE32 /* PBXTargetDependency */,
+			);
+			name = QumoRunnerAppTests;
+			packageProductDependencies = (
+			);
+			productName = QumoRunnerAppTests;
+			productReference = 80CD5BCE0656C99D5C77B0CF /* QumoRunnerAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		60EFF2797B114B9DA9E56AE1 /* QumoRunnerAgent */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 526A35A6656F4189E4BCF517 /* Build configuration list for PBXNativeTarget "QumoRunnerAgent" */;
+			buildPhases = (
+				C849E8F843A9B5211E13C3F0 /* Sources */,
+				9B3588A3B5525A53BB207D78 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				487AE5C596840E12AFB61F29 /* PBXTargetDependency */,
+			);
+			name = QumoRunnerAgent;
+			packageProductDependencies = (
+			);
+			productName = QumoRunnerAgent;
+			productReference = 327C36912846B313B1A1BCAB /* QumoRunnerAgent */;
+			productType = "com.apple.product-type.tool";
+		};
+		73AB786325C5721F752C37FC /* QumoRunnerApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4F66E0AA5F9EA6EF72EF57C6 /* Build configuration list for PBXNativeTarget "QumoRunnerApp" */;
+			buildPhases = (
+				4CE26E0D57DCDE75169CA92B /* Sources */,
+				02E8D3F44262C121DDD4CF97 /* Resources */,
+				104247201836B5E3290407F8 /* CopyFiles */,
+				58F11BCFABD72DB7E7466F76 /* Frameworks */,
+				F5ED98DFE38DECCD71886E2A /* Embed LaunchAgent executable */,
+				49E10D3C469280FB2C9F3928 /* Verify and embed LibTV 1.0.2 ARM64 */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				39615CB13DF67B4D8E038075 /* PBXTargetDependency */,
+				7D80611FDCFC3EFDDA104CFE /* PBXTargetDependency */,
+			);
+			name = QumoRunnerApp;
+			packageProductDependencies = (
+			);
+			productName = QumoRunnerApp;
+			productReference = 019437D38D4DC8680900CAC1 /* QumoRunnerApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E1AF4B317C5436E2A85AC851 /* RunnerCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 65B53960FF743E08410FD481 /* Build configuration list for PBXNativeTarget "RunnerCore" */;
+			buildPhases = (
+				560A3D99B768EF7829831A1B /* Sources */,
+				BC7FA4E87AC36A4805B47232 /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RunnerCore;
+			packageProductDependencies = (
+			);
+			productName = RunnerCore;
+			productReference = FEF0C456C42A0D2CBDBA5D1B /* libRunnerCore.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5F682D6390E36B37833874AC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					2D34C7D0915D9F530305EB27 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					3D5A785C72084390C4B0A593 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					60EFF2797B114B9DA9E56AE1 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					73AB786325C5721F752C37FC = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					E1AF4B317C5436E2A85AC851 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 9D167D886B104113EEFB58B1 /* Build configuration list for PBXProject "QumoRunner" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = E49AC3C5A27E93FD92BDCB26;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 1EA16B93EB3B02959E5719F8 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E1AF4B317C5436E2A85AC851 /* RunnerCore */,
+				60EFF2797B114B9DA9E56AE1 /* QumoRunnerAgent */,
+				2D34C7D0915D9F530305EB27 /* QumoRunnerAgentTests */,
+				3D5A785C72084390C4B0A593 /* QumoRunnerAppTests */,
+				73AB786325C5721F752C37FC /* QumoRunnerApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		02E8D3F44262C121DDD4CF97 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8F433285760302EF718FE44A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		49E10D3C469280FB2C9F3928 /* Verify and embed LibTV 1.0.2 ARM64 */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Verify and embed LibTV 1.0.2 ARM64";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources/Tools/libtv",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nLIBTV_SOURCE=\"$(/usr/bin/printenv QUMO_LIBTV_SOURCE 2>/dev/null || true)\"\nif [[ -z \"${LIBTV_SOURCE}\" ]]; then\n  LIBTV_SOURCE=\"/Users/qumo/.libtv/libtv\"\nfi\nEXPECTED_SHA=\"8605ff53e9f2185f09ba59597ba811e12d90294411ae15710e334be56a4d6e34\"\n\"${PROJECT_DIR}/Scripts/verify-bundled-libtv.sh\" \"${LIBTV_SOURCE}\" \"${EXPECTED_SHA}\"\nLIBTV_DIR=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources/Tools\"\nmkdir -p \"${LIBTV_DIR}\"\nditto \"${LIBTV_SOURCE}\" \"${LIBTV_DIR}/libtv\"\nchmod 755 \"${LIBTV_DIR}/libtv\"\n";
+		};
+		BC7FA4E87AC36A4805B47232 /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		F5ED98DFE38DECCD71886E2A /* Embed LaunchAgent executable */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${BUILT_PRODUCTS_DIR}/QumoRunnerAgent",
+			);
+			name = "Embed LaunchAgent executable";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources/QumoRunnerAgent",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nAGENT_DIR=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources\"\nmkdir -p \"${AGENT_DIR}\"\nditto \"${BUILT_PRODUCTS_DIR}/QumoRunnerAgent\" \"${AGENT_DIR}/QumoRunnerAgent\"\nif [[ \"${CODE_SIGNING_ALLOWED:-NO}\" == \"YES\" && -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]]; then\n  /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" \\\n    --timestamp=none \\\n    \"${AGENT_DIR}/QumoRunnerAgent\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		122278D0F53AB1B3556BF416 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9059BCEB52AAA411076B8944 /* AccountConcurrencyPolicyTests.swift in Sources */,
+				FC6F146AA1A66B3D6940E9AF /* AccountInsightModels.swift in Sources */,
+				01559A05497EA6CF0FC9761A /* AccountInsightParserTests.swift in Sources */,
+				9246749FA4F3CCDF74D1B72C /* AccountInsightParsing.swift in Sources */,
+				82659CD969A32FF776AD621E /* AccountInsightStore.swift in Sources */,
+				9350452DC7A53309CB1EB731 /* AccountInsightStoreTests.swift in Sources */,
+				7A761E8D8F0AB0A52257BAC0 /* AgentConfigurationStore.swift in Sources */,
+				FAAEAC1131AFF02C4D3E2260 /* AgentProfileRegistry.swift in Sources */,
+				BC53F06D65D0595F94481E0B /* AgentProfileRegistryTests.swift in Sources */,
+				28CFD131DDEDA61D1113B38A /* AgentSnapshot.swift in Sources */,
+				60D4E47103AE0E60127F7EEE /* LibTVLoginSupport.swift in Sources */,
+				DC661E94288C47700A4674E9 /* LibTVLoginSupportTests.swift in Sources */,
+				0A1081864D8E654CB1910E19 /* ModelCatalogParserTests.swift in Sources */,
+				B30C9F3B224BA46727D75734 /* ModelCatalogService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4CE26E0D57DCDE75169CA92B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A8F30C7BB106D0C2E591D2C8 /* AccountsView.swift in Sources */,
+				E5E91039323F25AD7B271452 /* ChromeAuthorizationLauncher.swift in Sources */,
+				026A6D9C2DDD9E6A1DE79B03 /* DiagnosticExporter.swift in Sources */,
+				78C4C95A20A45A670137BB73 /* GlobalModelCatalogRow.swift in Sources */,
+				44CFC04CED630C88494EEADD /* JobsView.swift in Sources */,
+				5B02480DD02D0AF193AFA672 /* KeychainStore.swift in Sources */,
+				B9BC81F10658EED129DC577F /* LaunchAgentManager.swift in Sources */,
+				2BC02F12B5BC05687468DB79 /* LogsView.swift in Sources */,
+				16AF1B7369DFEF44C5369624 /* ModelCatalogHeader.swift in Sources */,
+				91714B457C51669A4538F080 /* ModelCatalogManagerView.swift in Sources */,
+				18F5FF3F5E815658D1C99345 /* ModelCatalogTypes.swift in Sources */,
+				34224668129AF54BE5EE6E71 /* OperationalComponents.swift in Sources */,
+				7B3D3AB766270F4A2AE070A3 /* OverviewView.swift in Sources */,
+				5AC07E2F5712836D28344AB0 /* PairingService.swift in Sources */,
+				0A0A676194887411CA913615 /* QumoRunnerApp.swift in Sources */,
+				92562BDF378F3FBEF6ED8755 /* RootView.swift in Sources */,
+				D196E30B541A3800CC6228C9 /* RunnerAgentClient.swift in Sources */,
+				0669BBFD06F3143DAF3BE885 /* RunnerAgentProtocol.swift in Sources */,
+				79E9DF15DC5721512278F110 /* RunnerAppStore.swift in Sources */,
+				3275F61935CEAC9F020E50F2 /* RunnerConfigurationStore.swift in Sources */,
+				2DCD78F96DFD92ABE321B709 /* RunnerNotificationService.swift in Sources */,
+				2EC892D47619EF4F31B0C701 /* RunnerUIModels.swift in Sources */,
+				890ED89C1565A333E4C831FC /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		54930F288E80F787EC2ED04C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				60C78A1207D390E0BEF21A54 /* QuotaStateCopyTests.swift in Sources */,
+				AC49915C08D6A8F0E9A11574 /* RunnerUIModels.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		560A3D99B768EF7829831A1B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5EACD27713CD4636B87BAC8E /* ArtifactArchiver.swift in Sources */,
+				912C57AB97EE4583DB669917 /* ConcurrencyLimiter.swift in Sources */,
+				67B1E2DBC31BD74EBCEFA990 /* GenerationSpec.swift in Sources */,
+				F70C4E5350A69521A3945477 /* LibTVBinaryVerifier.swift in Sources */,
+				D658BEDBB75420DBFD53B900 /* LibTVGenerationExecution.swift in Sources */,
+				AE0B6D767B93CE135BF94B42 /* LibTVOutputParser.swift in Sources */,
+				E7DB5F3EB3F86339D49D95A5 /* LibTVProcess.swift in Sources */,
+				D3F879F4D84B999E0A377BF4 /* Models.swift in Sources */,
+				A2013FBF081A323BED55B8C9 /* ProfileStorage.swift in Sources */,
+				0CE0AAF6FFD6BF2D9E07730B /* RunnerAPI.swift in Sources */,
+				96028CB463EB995CB9937CEF /* RunnerEngine.swift in Sources */,
+				5176B6302864FC6BBC997D92 /* SubmissionExecutor.swift in Sources */,
+				BF0B812839889C9526F9FF11 /* SubmissionJournal.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C849E8F843A9B5211E13C3F0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AF667A6E3EDAB7273EC96D93 /* AccountInsightCoordinator.swift in Sources */,
+				1C16A7C15E236DD3AEAEBDD6 /* AccountInsightModels.swift in Sources */,
+				B20A950ACFB1646F7379604A /* AccountInsightParsing.swift in Sources */,
+				0C2EEF61D2385B35C956AADC /* AccountInsightStore.swift in Sources */,
+				ED63AB10E19FC943F7666D85 /* AccountProfileAPIService.swift in Sources */,
+				743CF249E3BB4CE373C0465B /* AgentAPITransport.swift in Sources */,
+				583BA1A6E23B5AD4239BF60C /* AgentConfigurationStore.swift in Sources */,
+				231C3DA726A287B038AE882D /* AgentProfileRegistry.swift in Sources */,
+				8E2A0CC472FE52689391792D /* AgentRuntime.swift in Sources */,
+				DC39DE15D7D01FCEC0430A8D /* AgentSnapshot.swift in Sources */,
+				2B9C8C831659611EDD0A44CF /* LibTVLoginSupport.swift in Sources */,
+				A933044E42232CCD179FF357 /* LoginSessionCoordinator.swift in Sources */,
+				83D8CDF26BDAE3AFBEB04ADB /* ModelCatalogService.swift in Sources */,
+				0161160F3067518505083586 /* QumoRunnerAgentMain.swift in Sources */,
+				0F48EC2F89D0B71456D38139 /* RunnerAgentProtocol.swift in Sources */,
+				35E356EB891BCF767D8A6684 /* RunnerAgentService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		39615CB13DF67B4D8E038075 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1AF4B317C5436E2A85AC851 /* RunnerCore */;
+			targetProxy = BC104BC32B8CFFCA01FEC2CB /* PBXContainerItemProxy */;
+		};
+		487AE5C596840E12AFB61F29 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1AF4B317C5436E2A85AC851 /* RunnerCore */;
+			targetProxy = D978B6C953E487BE3B4E1C47 /* PBXContainerItemProxy */;
+		};
+		7D80611FDCFC3EFDDA104CFE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 60EFF2797B114B9DA9E56AE1 /* QumoRunnerAgent */;
+			targetProxy = 73E2ED299806250283F0F381 /* PBXContainerItemProxy */;
+		};
+		ACAA5BD3D86AF76FF2C7B596 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1AF4B317C5436E2A85AC851 /* RunnerCore */;
+			targetProxy = A2930004492E52A3F5FFC575 /* PBXContainerItemProxy */;
+		};
+		BB7F4906E462416CF9F3BE32 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1AF4B317C5436E2A85AC851 /* RunnerCore */;
+			targetProxy = CAAA55B40C925491F83A2233 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2A0EA295C9B569754C0F33D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		398ACBA58E24865068E39F72 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		4C94F6EAFBD3CF0EBBF8678D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEFINES_MODULE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.qumo.RunnerCore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		584504FF0BD0CB25FB6BC469 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.qumo.runner.agent;
+				PRODUCT_NAME = QumoRunnerAgent;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		6E1A7E865177376CDC045BCD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qumo.runner.app-tests";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6E3876C0C36536ABDBE46D15 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qumo.runner.app-tests";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		8EDFCF093586F05A226A75AE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qumo.runner.agent-tests";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		AD8E3B1548DF8E2E57B15D82 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/QumoRunnerApp-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.qumo.runner;
+				PRODUCT_NAME = "Qumo Runner";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		E3C45577A621CF296513833E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.qumo.runner.agent-tests";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		EA053C802DED73E2F48B593E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/QumoRunnerApp-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.qumo.runner;
+				PRODUCT_NAME = "Qumo Runner";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		F2928CFB5982429D699FBF5A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.qumo.runner.agent;
+				PRODUCT_NAME = QumoRunnerAgent;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		F70EE7318929288892491562 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				DEFINES_MODULE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.qumo.RunnerCore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4F66E0AA5F9EA6EF72EF57C6 /* Build configuration list for PBXNativeTarget "QumoRunnerApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EA053C802DED73E2F48B593E /* Debug */,
+				AD8E3B1548DF8E2E57B15D82 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		526A35A6656F4189E4BCF517 /* Build configuration list for PBXNativeTarget "QumoRunnerAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F2928CFB5982429D699FBF5A /* Debug */,
+				584504FF0BD0CB25FB6BC469 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		65B53960FF743E08410FD481 /* Build configuration list for PBXNativeTarget "RunnerCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F70EE7318929288892491562 /* Debug */,
+				4C94F6EAFBD3CF0EBBF8678D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9D167D886B104113EEFB58B1 /* Build configuration list for PBXProject "QumoRunner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				398ACBA58E24865068E39F72 /* Debug */,
+				2A0EA295C9B569754C0F33D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ACB0E4419CC350306223F0B8 /* Build configuration list for PBXNativeTarget "QumoRunnerAgentTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E3C45577A621CF296513833E /* Debug */,
+				8EDFCF093586F05A226A75AE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B8A83022BC4B581726192C4C /* Build configuration list for PBXNativeTarget "QumoRunnerAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6E1A7E865177376CDC045BCD /* Debug */,
+				6E3876C0C36536ABDBE46D15 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 5F682D6390E36B37833874AC /* Project object */;
+}

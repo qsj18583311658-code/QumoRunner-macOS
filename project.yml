@@ -1,0 +1,153 @@
+name: QumoRunner
+options:
+  bundleIdPrefix: com.qumo
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: false
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: false
+    SWIFT_STRICT_CONCURRENCY: complete
+targets:
+  RunnerCore:
+    type: library.static
+    platform: macOS
+    sources:
+      - Sources/RunnerCore
+    settings:
+      base:
+        DEFINES_MODULE: true
+  QumoRunnerAgent:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources/QumoRunnerAgent
+    dependencies:
+      - target: RunnerCore
+    settings:
+      base:
+        PRODUCT_NAME: QumoRunnerAgent
+        PRODUCT_BUNDLE_IDENTIFIER: com.qumo.runner.agent
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: false
+        SKIP_INSTALL: true
+  QumoRunnerAgentTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/QumoRunnerAgentTests
+      - Sources/QumoRunnerAgent/Models/AgentSnapshot.swift
+      - Sources/QumoRunnerAgent/Models/AccountInsightModels.swift
+      - Sources/QumoRunnerAgent/Services/AccountInsightParsing.swift
+      - Sources/QumoRunnerAgent/Services/AccountInsightStore.swift
+      - Sources/QumoRunnerAgent/Services/AgentConfigurationStore.swift
+      - Sources/QumoRunnerAgent/Services/AgentProfileRegistry.swift
+      - Sources/QumoRunnerAgent/Services/ModelCatalogService.swift
+      - Sources/QumoRunnerAgent/Services/LibTVLoginSupport.swift
+    dependencies:
+      - target: RunnerCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qumo.runner.agent-tests
+  QumoRunnerAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/QumoRunnerAppTests
+      - Sources/QumoRunnerApp/Models/RunnerUIModels.swift
+    dependencies:
+      - target: RunnerCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qumo.runner.app-tests
+  QumoRunnerApp:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/QumoRunnerApp
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+      - path: Resources/com.qumo.runner.agent.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
+    dependencies:
+      - target: RunnerCore
+      - target: QumoRunnerAgent
+        embed: false
+    info:
+      path: Config/QumoRunnerApp-Info.plist
+      properties:
+        CFBundleDisplayName: Qumo Runner
+        CFBundleName: Qumo Runner
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: Copyright © 2026 Qumo
+        NSPrincipalClass: NSApplication
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qumo.runner
+        PRODUCT_NAME: Qumo Runner
+        GENERATE_INFOPLIST_FILE: false
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    postBuildScripts:
+      - name: Embed LaunchAgent executable
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - ${BUILT_PRODUCTS_DIR}/QumoRunnerAgent
+        outputFiles:
+          - ${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources/QumoRunnerAgent
+        script: |
+          set -euo pipefail
+          AGENT_DIR="${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources"
+          mkdir -p "${AGENT_DIR}"
+          ditto "${BUILT_PRODUCTS_DIR}/QumoRunnerAgent" "${AGENT_DIR}/QumoRunnerAgent"
+          if [[ "${CODE_SIGNING_ALLOWED:-NO}" == "YES" && -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]]; then
+            /usr/bin/codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" \
+              --timestamp=none \
+              "${AGENT_DIR}/QumoRunnerAgent"
+          fi
+      - name: Verify and embed LibTV 1.0.2 ARM64
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - ${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources/Tools/libtv
+        script: |
+          set -euo pipefail
+          LIBTV_SOURCE="$(/usr/bin/printenv QUMO_LIBTV_SOURCE 2>/dev/null || true)"
+          if [[ -z "${LIBTV_SOURCE}" ]]; then
+            LIBTV_SOURCE="/Users/qumo/.libtv/libtv"
+          fi
+          EXPECTED_SHA="8605ff53e9f2185f09ba59597ba811e12d90294411ae15710e334be56a4d6e34"
+          "${PROJECT_DIR}/Scripts/verify-bundled-libtv.sh" "${LIBTV_SOURCE}" "${EXPECTED_SHA}"
+          LIBTV_DIR="${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Resources/Tools"
+          mkdir -p "${LIBTV_DIR}"
+          ditto "${LIBTV_SOURCE}" "${LIBTV_DIR}/libtv"
+          chmod 755 "${LIBTV_DIR}/libtv"
+schemes:
+  QumoRunner:
+    build:
+      targets:
+        QumoRunnerApp: all
+        QumoRunnerAgent: all
+        RunnerCore: all
+    test:
+      targets:
+        - QumoRunnerAgentTests
+        - QumoRunnerAppTests
+    run:
+      config: Debug
+      executable: QumoRunnerApp
+    profile:
+      config: Release
+      executable: QumoRunnerApp
+    archive:
+      config: Release
