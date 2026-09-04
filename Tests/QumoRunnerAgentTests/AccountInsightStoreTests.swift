@@ -2,6 +2,23 @@ import Foundation
 import XCTest
 
 final class AccountInsightStoreTests: XCTestCase {
+    func testRuntimeCatalogProvenanceSurvivesRestartAndBlocksStaleParameters() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AccountInsightStore(root: root)
+        try await store.reconcileCatalog(profileRef: "p", incoming: [candidate(schema: "schema-a")])
+        let legacyReady = await store.catalogReady(profileRef: "p", runtimePath: "/runtime/1.1.3/libtv")
+        XCTAssertFalse(legacyReady)
+        try await store.reconcileCatalog(profileRef: "p", incoming: [candidate(schema: "schema-a")], runtimePath: "/runtime/1.1.3/libtv")
+        let reloaded = AccountInsightStore(root: root)
+        let currentReady = await reloaded.catalogReady(profileRef: "p", runtimePath: "/runtime/1.1.3/libtv")
+        let newerReady = await reloaded.catalogReady(profileRef: "p", runtimePath: "/runtime/1.2.0/libtv")
+        let stale = await reloaded.generationSchemas(profileRef: "p", runtimePath: "/runtime/1.2.0/libtv")
+        XCTAssertTrue(currentReady)
+        XCTAssertFalse(newerReady)
+        XCTAssertTrue(stale.isEmpty)
+    }
+
     func testQuotaAndPlanSurviveStoreReloadWithProtectedPermissions() async throws {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "account-insight-store-\(UUID().uuidString)", directoryHint: .isDirectory)

@@ -79,6 +79,9 @@ final class RunnerAppStore: ObservableObject {
         }
     }
 
+    func setCLINightly(_ enabled: Bool) async {
+        await execute(command: "set_cli_nightly", payload: ["enabled": String(enabled)], showSuccessMessage: false)
+    }
     func checkCLIUpdate() async { await execute(command: "check_cli_update") }
     func updateCLI(version: String? = nil) async {
         await execute(command: "update_cli", payload: version.map { ["version": $0] } ?? [:])

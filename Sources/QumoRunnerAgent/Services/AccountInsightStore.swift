@@ -24,8 +24,10 @@ actor AccountInsightStore {
     func update(_ profileRef: String, _ body: (inout StoredProfileInsight) throws -> Void) throws {
         var value = state.profiles[profileRef] ?? .empty()
         try body(&value)
+        let previous = state.profiles[profileRef]
         state.profiles[profileRef] = value
-        try persist()
+        do { try persist() }
+        catch { state.profiles[profileRef] = previous; throw error }
     }
 
     func remove(_ profileRef: String) throws {
@@ -48,13 +50,14 @@ actor AccountInsightStore {
         }
     }
 
-    func reconcileCatalog(profileRef: String, incoming: [CatalogCandidate]) throws {
+    func reconcileCatalog(profileRef: String, incoming: [CatalogCandidate], runtimePath: String? = nil) throws {
         try update(profileRef) { profile in
             let reconciled = ModelCatalogParser.reconcile(existing: profile.catalog, incoming: incoming)
             profile.catalog = reconciled
             profile.catalogRevision = ModelCatalogParser.revision(for: reconciled)
             profile.catalogRefreshedAt = .now
             profile.catalogError = nil
+            profile.catalogRuntimePath = runtimePath
         }
     }
 
@@ -67,7 +70,12 @@ actor AccountInsightStore {
         return model.schemaHash
     }
 
-    func generationSchemas(profileRef: String) -> [LibTVModelSchemaSnapshot] {
+    func catalogReady(profileRef: String, runtimePath: String) -> Bool {
+        state.profiles[profileRef]?.catalogRuntimePath == runtimePath
+    }
+
+    func generationSchemas(profileRef: String, runtimePath: String? = nil) -> [LibTVModelSchemaSnapshot] {
+        if let runtimePath, !catalogReady(profileRef: profileRef, runtimePath: runtimePath) { return [] }
         guard let profile = state.profiles[profileRef] else { return [] }
         return profile.catalog.compactMap { model in
             guard model.approvalState != .removed, let rawSchema = model.rawSchema else { return nil }

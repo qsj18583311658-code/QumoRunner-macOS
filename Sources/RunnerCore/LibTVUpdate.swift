@@ -13,9 +13,12 @@ public struct LibTVUpdateStatus: Codable, Sendable, Equatable {
     public var targetVersion: String?
     public var message: String?
     public var previousVersion: String?
+    public var nightlyEnabled: Bool?
+    public var lastNightlyAttempt: Date?
+    public var scheduleNote: String?
 
     public init() {}
-    public var isBusy: Bool { ["downloading", "waiting", "activating"].contains(phase) }
+    public var isBusy: Bool { ["downloading", "waiting", "activating", "validating"].contains(phase) }
     public func availableVersion(current: String?) -> String? {
         guard let channelVersion, let current,
               LibTVReleaseVersion.isNewer(channelVersion, than: current) else { return nil }
@@ -45,9 +48,11 @@ public enum LibTVReleaseVersion {
 }
 
 public enum LibTVUpdateError: Error, LocalizedError {
-    case invalidVersion, invalidManifest, busy, notNewer, drainTimeout
+    case invalidVersion, invalidManifest, busy, notNewer, drainTimeout, updateTimeout, windowClosed
     public var errorDescription: String? {
         switch self {
+        case .updateTimeout: "更新超过时间上限，已取消更新并开始恢复原版本。"
+        case .windowClosed: "夜间维护窗口已结束，保留原版本，下一晚再尝试。"
         case .invalidVersion: "请输入官方稳定版本号，例如 1.1.3。"
         case .invalidManifest: "官方版本清单不可用或格式不正确；无法确认最新版本。"
         case .busy: "CLI 更新或版本验证正在进行，请等待完成。"
@@ -128,5 +133,34 @@ public struct LibTVUpdateClient: Sendable {
                   http.url == url else { throw LibTVUpdateError.invalidManifest }
             return .success(data)
         } catch { return .failure(error) }
+    }
+}
+
+/// The window follows the Mac's current time zone. There is no daytime catch-up.
+public enum LibTVMaintenanceWindow {
+    public static func contains(_ now: Date, calendar: Calendar = .current) -> Bool {
+        calendar.component(.hour, from: now) == 3
+    }
+    public static func shouldAttempt(now: Date, lastAttempt: Date?, checkedAt: Date?, calendar: Calendar = .current) -> Bool {
+        guard contains(now, calendar: calendar),
+              let checkedAt, now.timeIntervalSince(checkedAt) >= 0,
+              now.timeIntervalSince(checkedAt) <= 6 * 60 * 60 else { return false }
+        return lastAttempt.map { !calendar.isDate($0, inSameDayAs: now) } ?? true
+    }
+}
+
+public enum LibTVUpdateDeadline {
+    /// Structured cancellation joins the losing operation before rollback starts,
+    /// so an expired download cannot stage or activate a candidate afterwards.
+    public static func run<T: Sendable>(for limit: Duration, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: limit)
+                throw LibTVUpdateError.updateTimeout
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
     }
 }

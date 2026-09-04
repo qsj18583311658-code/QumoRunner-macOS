@@ -1,3 +1,4 @@
+import Darwin
 import CryptoKit
 import Foundation
 import Security
@@ -72,6 +73,14 @@ public enum LibTVBinaryVerifier {
         process.standardError = output
         do {
             try process.run()
+            let watchdog = DispatchWorkItem {
+                if process.isRunning { process.terminate() }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                    if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 15, execute: watchdog)
+            defer { watchdog.cancel() }
             process.waitUntilExit()
         } catch {
             throw LibTVBinaryVerificationError.versionInvocationFailed(error.localizedDescription)
@@ -172,6 +181,14 @@ public enum LibTVBinaryVerifier {
         process.standardError = output
         do {
             try process.run()
+            let watchdog = DispatchWorkItem {
+                if process.isRunning { process.terminate() }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                    if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 15, execute: watchdog)
+            defer { watchdog.cancel() }
             process.waitUntilExit()
         } catch {
             throw LibTVBinaryVerificationError.versionInvocationFailed(error.localizedDescription)

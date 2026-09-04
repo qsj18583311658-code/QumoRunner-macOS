@@ -14,6 +14,7 @@ actor AccountInsightCoordinator {
     private var contexts: [String: Context] = [:]
     private var webFlights = Set<String>()
     private var catalogFlights = Set<String>()
+    private var nextCatalogAttempt: [String: Date] = [:]
     private var startupScheduled = Set<String>()
     private var nextWebRefresh: [String: Date] = [:]
     private var lastFullSchemaRefresh: [String: Date] = [:]
@@ -28,6 +29,7 @@ actor AccountInsightCoordinator {
         let previous = contexts[profile.profileRef]?.runner.executableURL
         contexts[profile.profileRef] = Context(accountRef: profile.accountRef, runner: runner)
         if let previous, previous != runner.executableURL {
+            nextCatalogAttempt.removeValue(forKey: profile.profileRef)
             lastFullSchemaRefresh.removeValue(forKey: profile.profileRef)
             scheduleCatalog(profileRef: profile.profileRef)
         }
@@ -62,7 +64,7 @@ actor AccountInsightCoordinator {
                 scheduleWeb(profileRef: profile.profileRef, reason: .scheduled)
             }
             let insight = await store.profile(profile.profileRef)
-            if insight.catalogRefreshedAt.map({ now.timeIntervalSince($0) >= 6 * 60 * 60 }) ?? true {
+            if insight.catalogRuntimePath != contexts[profile.profileRef]?.runner.executableURL.path || insight.catalogRefreshedAt.map({ now.timeIntervalSince($0) >= 6 * 60 * 60 }) ?? true {
                 scheduleCatalog(profileRef: profile.profileRef)
             }
         }
@@ -100,13 +102,16 @@ actor AccountInsightCoordinator {
         let detected = plan?.detectedMaxConcurrency.map { min(8, max(0, $0)) }
         let effectiveQuota = effectiveQuota(for: insight)
         let policyQuotaState: AccountQuotaState = effectiveQuota.state == .stale && effectiveQuota.snapshot?.total == 0 ? .zero : effectiveQuota.state
-        let effective = AccountConcurrencyPolicy.effective(
+        let policyCapacity = AccountConcurrencyPolicy.effective(
             autoActivated: insight.autoConcurrencyActivated,
             quotaState: policyQuotaState,
             detected: detected,
             unlimited: plan?.unlimitedConcurrency == true,
             globalLimit: globalLimit
         )
+        let catalogMatches = insight.catalogRuntimePath != nil
+            && insight.catalogRuntimePath == contexts[profileRef]?.runner.executableURL.path
+        let effective = catalogMatches ? policyCapacity : 0
         return AccountInsightView(
             refreshing: webFlights.contains(profileRef),
             autoConcurrencyActivated: insight.autoConcurrencyActivated,
@@ -175,8 +180,37 @@ actor AccountInsightCoordinator {
         )
     }
 
+    func catalogReady(profileRef: String) async -> Bool {
+        guard let path = contexts[profileRef]?.runner.executableURL.path else { return false }
+        return await store.catalogReady(profileRef: profileRef, runtimePath: path)
+    }
+
+    func waitForRuntimeCatalogs(profileRefs: [String], runtimePath: String) async throws {
+        for ref in profileRefs {
+            guard contexts[ref]?.runner.executableURL.path == runtimePath else { throw LibTVUpdateError.busy }
+            if !(await catalogReady(profileRef: ref)) { scheduleCatalog(profileRef: ref) }
+        }
+        while true {
+            try Task.checkCancellation()
+            var ready = true
+            for ref in profileRefs {
+                guard contexts[ref]?.runner.executableURL.path == runtimePath else { throw LibTVUpdateError.busy }
+                let profile = await store.profile(ref)
+                if profile.catalogRuntimePath != runtimePath {
+                    ready = false
+                    if !catalogFlights.contains(ref), let error = profile.catalogError {
+                        throw CatalogError.commandFailed(ref, error)
+                    }
+                }
+            }
+            if ready { return }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
     func generationSchemas(profileRef: String) async -> [LibTVModelSchemaSnapshot] {
-        await store.generationSchemas(profileRef: profileRef)
+        guard let path = contexts[profileRef]?.runner.executableURL.path else { return [] }
+        return await store.generationSchemas(profileRef: profileRef, runtimePath: path)
     }
 
     func schemaUpload(
@@ -210,7 +244,8 @@ actor AccountInsightCoordinator {
     }
 
     private func scheduleCatalog(profileRef: String) {
-        guard contexts[profileRef] != nil, catalogFlights.insert(profileRef).inserted else { return }
+        guard nextCatalogAttempt[profileRef, default: .distantPast] <= Date(),
+              contexts[profileRef] != nil, catalogFlights.insert(profileRef).inserted else { return }
         Task { [weak self] in await self?.performCatalogRefresh(profileRef: profileRef) }
     }
 
@@ -319,16 +354,19 @@ actor AccountInsightCoordinator {
         }
         do {
             let current = await store.profile(profileRef)
-            let forceSchemaRefresh = lastFullSchemaRefresh[profileRef].map { Date().timeIntervalSince($0) >= 24 * 60 * 60 } ?? true
+            let forceSchemaRefresh = current.catalogRuntimePath != context.runner.executableURL.path || lastFullSchemaRefresh[profileRef].map { Date().timeIntervalSince($0) >= 24 * 60 * 60 } ?? true
             let incoming = try await catalogService.fetch(
                 using: context.runner,
                 existing: current.catalog,
                 forceSchemaRefresh: forceSchemaRefresh
             )
             guard contexts[profileRef]?.runner.executableURL == context.runner.executableURL else { return }
-            try await store.reconcileCatalog(profileRef: profileRef, incoming: incoming)
+            try await store.reconcileCatalog(profileRef: profileRef, incoming: incoming, runtimePath: context.runner.executableURL.path)
+            nextCatalogAttempt.removeValue(forKey: profileRef)
             if forceSchemaRefresh { lastFullSchemaRefresh[profileRef] = .now }
         } catch {
+            guard contexts[profileRef]?.runner.executableURL == context.runner.executableURL else { return }
+            nextCatalogAttempt[profileRef] = Date().addingTimeInterval(60)
             try? await store.update(profileRef) { $0.catalogError = error.localizedDescription }
         }
     }

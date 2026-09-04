@@ -43,4 +43,40 @@ import Testing
         #expect(release.archiveURL.absoluteString == "https://liblibai-web-static.liblib.cloud/cli/1.1.3/libtv-macos-arm64.zip")
     }
 
+    @Test func nightlyWindowUsesLocalDayAndDoesNotCatchUp() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        func date(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 9, day: day, hour: hour, minute: minute))!
+        }
+        #expect(!LibTVMaintenanceWindow.contains(date(4, 2, 59), calendar: calendar))
+        #expect(LibTVMaintenanceWindow.contains(date(4, 3), calendar: calendar))
+        #expect(!LibTVMaintenanceWindow.contains(date(4, 4), calendar: calendar))
+        #expect(LibTVMaintenanceWindow.shouldAttempt(now: date(4, 3), lastAttempt: date(3, 3), checkedAt: date(4, 2), calendar: calendar))
+        #expect(!LibTVMaintenanceWindow.shouldAttempt(now: date(4, 3, 30), lastAttempt: date(4, 3), checkedAt: date(4, 2), calendar: calendar))
+        #expect(!LibTVMaintenanceWindow.shouldAttempt(now: date(4, 3), lastAttempt: nil, checkedAt: date(3, 12), calendar: calendar))
+        #expect(!LibTVMaintenanceWindow.shouldAttempt(now: date(4, 9), lastAttempt: nil, checkedAt: date(4, 8), calendar: calendar))
+    }
+
+    @Test func timeoutJoinsCancelledWorkBeforeReturning() async throws {
+        actor State {
+            var finished = false
+            var published = false
+            func finish() { finished = true }
+            func publish() { published = true }
+        }
+        let state = State()
+        await #expect(throws: LibTVUpdateError.self) {
+            try await LibTVUpdateDeadline.run(for: .milliseconds(20)) {
+                do { try await Task.sleep(for: .seconds(60)) }
+                catch { await state.finish(); throw error }
+                await state.publish()
+            }
+        }
+        #expect(await state.finished)
+        #expect(!(await state.published))
+        let result = try await LibTVUpdateDeadline.run(for: .seconds(1)) { 42 }
+        #expect(result == 42)
+    }
+
 }

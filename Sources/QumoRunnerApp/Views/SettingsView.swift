@@ -169,6 +169,13 @@ struct CLIUpdateView: View {
                 }
             }
             if !compact {
+                Toggle("夜间自动更新 CLI（03:00–04:00）", isOn: Binding(
+                    get: { update?.nightlyEnabled ?? true },
+                    set: { value in Task { await store.setCLINightly(value) } }
+                ))
+                Text("按本机时区执行；有任务则推迟，每晚最多尝试一次，错过窗口顺延下一晚。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let note = update?.scheduleNote { Text(note).font(.caption).foregroundStyle(.secondary) }
                 if let checked = update?.checkedAt {
                     Text("上次成功检查：\(checked.formatted(date: .abbreviated, time: .shortened)) · 每 6 小时自动检查")
                         .font(.caption).foregroundStyle(.secondary)
@@ -183,7 +190,7 @@ struct CLIUpdateView: View {
                         }.disabled(busy || specifiedVersion.isEmpty)
                     }
                 }
-                Text("更新时暂停领取，等待已有任务完成后切换；失败保留原版，可回滚。若新版修改了命令格式，将提示需要更新 Runner。")
+                Text("先下载再暂停领取，任务结束后切换；模型参数验证完成才恢复领取。下载最多 5 分钟，更新最多 45 分钟，失败或超时自动恢复原版；恢复异常保持暂停。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

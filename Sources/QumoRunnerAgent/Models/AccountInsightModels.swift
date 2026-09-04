@@ -125,6 +125,7 @@ struct StoredProfileInsight: Codable, Sendable {
     var catalogRevision: String?
     var catalogRefreshedAt: Date?
     var catalogError: String?
+    var catalogRuntimePath: String? = nil
 
     static func empty() -> Self {
         Self(
@@ -141,7 +142,7 @@ struct StoredProfileInsight: Codable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case webDataStoreID, quota, plan, planError, autoConcurrencyActivated, catalog, catalogRevision, catalogRefreshedAt, catalogError
+        case webDataStoreID, quota, plan, planError, autoConcurrencyActivated, catalog, catalogRevision, catalogRefreshedAt, catalogError, catalogRuntimePath
     }
 
     init(
@@ -176,6 +177,7 @@ struct StoredProfileInsight: Codable, Sendable {
         catalog = try container.decodeIfPresent([StoredCatalogItem].self, forKey: .catalog) ?? []
         catalogRevision = try container.decodeIfPresent(String.self, forKey: .catalogRevision)
         catalogRefreshedAt = try container.decodeIfPresent(Date.self, forKey: .catalogRefreshedAt)
+        catalogRuntimePath = try container.decodeIfPresent(String.self, forKey: .catalogRuntimePath)
         catalogError = try container.decodeIfPresent(String.self, forKey: .catalogError)
     }
 }

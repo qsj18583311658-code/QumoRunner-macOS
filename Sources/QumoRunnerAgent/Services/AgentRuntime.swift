@@ -127,6 +127,10 @@ actor AgentRuntime {
         }
         defer { if mutatesRuntime { runtimeCommandInProgress = false } }
         switch command {
+        case "set_cli_nightly":
+            cliUpdate.nightlyEnabled = values["enabled"] == "true"
+            saveCLIUpdate()
+            return cliUpdate.nightlyEnabled == true ? "已启用每晚 03:00–04:00 的 CLI 更新窗口。" : "已关闭夜间自动更新，仍会检查并提醒新版。"
         case "check_cli_update":
             Task { await self.checkCLIUpdate() }
             return "正在检查官方 CLI 版本清单。"
@@ -144,7 +148,7 @@ actor AgentRuntime {
             cliUpdate.phase = command == "rollback_cli" ? "waiting" : "downloading"
             cliUpdate.message = command == "rollback_cli" ? "等待现有任务结束后回滚…" : "正在下载官方 CLI，并验证签名、完整性和命令兼容性…"
             saveCLIUpdate()
-            localUpdateTask = Task { await self.performCLIUpdate(version: target, rollback: command == "rollback_cli") }
+            localUpdateTask = Task { await self.performCLIUpdate(version: target, rollback: command == "rollback_cli", scheduled: values["scheduled"] == "true") }
             return cliUpdate.message ?? "已开始更新。"
         case "pause_claiming": await engine?.pause(); state = .paused; return "已暂停领取新任务；正在运行的任务会继续。"
         case "resume_claiming": await engine?.resume(); state = .idle; return "已恢复领取新任务。"
@@ -322,6 +326,7 @@ actor AgentRuntime {
         do {
             try await connectIfNeeded()
             guard let engine else { return }
+            await scheduleNightlyUpdateIfNeeded(engine)
             await insights.tick(profiles: profileRegistry.all())
             try await rebuildProfilesIfSafe(engine)
             await syncInventoriesIfNeeded()
@@ -371,65 +376,45 @@ actor AgentRuntime {
         }
     }
 
-    private func performCLIUpdate(version: String?, rollback: Bool) async {
-        // Keep scheduler heartbeats and existing task polling alive throughout maintenance.
+    private func scheduleNightlyUpdateIfNeeded(_ engine: RunnerEngine) async {
+        guard cliUpdate.nightlyEnabled ?? true, localUpdateTask == nil, serverReachable,
+              cliUpdate.checkError == nil,
+              let version = cliUpdate.availableVersion(current: libTVVerification?.version),
+              LibTVMaintenanceWindow.shouldAttempt(now: .now, lastAttempt: cliUpdate.lastNightlyAttempt, checkedAt: cliUpdate.checkedAt) else { return }
+        let snapshot = await engine.snapshot()
+        guard snapshot.activeJobs.isEmpty, !snapshot.paused else {
+            cliUpdate.scheduleNote = "当前有任务或已手动暂停，等本次窗口内空闲再更新；04:00 后顺延下一晚。"
+            return
+        }
+        do {
+            _ = try await perform(command: "update_cli", values: ["version": version, "scheduled": "true"])
+            cliUpdate.lastNightlyAttempt = .now
+            cliUpdate.scheduleNote = "本晚已发起一次更新；失败后等待下一晚或手动重试。"
+            saveCLIUpdate()
+        } catch { cliUpdate.scheduleNote = "暂不能开始夜间更新：\(error.localizedDescription)" }
+    }
+
+    private func performCLIUpdate(version: String?, rollback: Bool, scheduled: Bool) async {
         let maintenanceEngine = engine
         let originalRuntime = try? await runtimeRegistry?.activeRuntime()
-        await maintenanceEngine?.beginRuntimeMaintenance()
         do {
-            guard let runtimeRegistry, let runtimeInstaller else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
-            let candidate: LibTVRuntimeRecord?
-            if rollback { candidate = nil }
-            else {
-                guard let version else { throw LibTVUpdateError.invalidVersion }
-                candidate = try await runtimeInstaller.downloadAndStage(LibTVReleaseVersion.release(version))
+            try await LibTVUpdateDeadline.run(for: .seconds(45 * 60)) {
+                try await self.executeCLIUpdate(version: version, rollback: rollback, scheduled: scheduled, engine: maintenanceEngine)
             }
-            cliUpdate.phase = "waiting"
-            cliUpdate.message = "等待现有任务结束；已暂停领取新任务…"
-            saveCLIUpdate()
-            let deadline = Date().addingTimeInterval(30 * 60)
-            if let maintenanceEngine {
-                while !(await maintenanceEngine.runtimeSwitchReady()) {
-                    guard Date() < deadline else { throw LibTVUpdateError.drainTimeout }
-                    try await Task.sleep(for: .seconds(1))
-                }
-            }
-            cliUpdate.phase = "activating"
-            cliUpdate.message = "正在切换 CLI…"
-            saveCLIUpdate()
-            let record: LibTVRuntimeRecord
-            if rollback { record = try await rollbackRuntime() }
-            else {
-                guard let candidate else { throw LibTVRuntimeRegistryError.candidateUnavailable }
-                _ = try await verifyRuntimeContract(candidate)
-                record = try await runtimeRegistry.activateCandidate(expected: candidate.identity)
-                do { libTVVerification = try Self.verifyRuntime(record) }
-                catch {
-                    _ = try? await runtimeRegistry.rollback()
-                    await verifyLibTV()
-                    throw error
-                }
-            }
-            profileRunners = [:]
-            registeredProfileSignature = ""
-            lastInventoryRevision = [:]
-            if let maintenanceEngine { try await rebuildProfilesIfSafe(maintenanceEngine) }
             cliUpdate.phase = "completed"
-            cliUpdate.message = "已\(rollback ? "回滚" : "更新")到 LibTV \(record.identity.version)。"
+            cliUpdate.message = "已\(rollback ? "回滚" : "更新")到 LibTV \(libTVVerification?.version ?? "未知")，模型参数验证完成。"
             appendLog(.info, cliUpdate.message!)
         } catch {
             if let originalRuntime, let runtimeRegistry,
                let current = try? await runtimeRegistry.snapshot(), current.active != originalRuntime.identity,
                current.previous == originalRuntime.identity {
                 do {
-                    let restored = try await runtimeRegistry.rollback(expected: originalRuntime.identity)
-                    libTVVerification = try Self.verifyRuntime(restored)
-                    profileRunners = [:]; registeredProfileSignature = ""
-                    if let maintenanceEngine { try await rebuildProfilesIfSafe(maintenanceEngine) }
+                    try await LibTVUpdateDeadline.run(for: .seconds(120)) {
+                        try await self.restoreRuntime(originalRuntime, engine: maintenanceEngine)
+                    }
                 } catch {
-                    libTVVerification = nil
                     await maintenanceEngine?.pause()
-                    appendLog(.error, "更新恢复失败，已暂停领取：\(error.localizedDescription)")
+                    appendLog(.error, "更新恢复尚未完成，已暂停领取，请运行诊断：\(error.localizedDescription)")
                 }
             }
             cliUpdate.phase = "failed"
@@ -440,6 +425,69 @@ actor AgentRuntime {
         cliUpdate.previousVersion = try? await runtimeRegistry?.snapshot().previous?.version
         saveCLIUpdate()
         localUpdateTask = nil
+    }
+
+    private func executeCLIUpdate(version: String?, rollback: Bool, scheduled: Bool, engine: RunnerEngine?) async throws {
+        guard let runtimeRegistry, let runtimeInstaller else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
+        let candidate: LibTVRuntimeRecord?
+        if rollback { candidate = nil }
+        else {
+            guard let version else { throw LibTVUpdateError.invalidVersion }
+            candidate = try await runtimeInstaller.downloadAndStage(LibTVReleaseVersion.release(version))
+        }
+        try Task.checkCancellation()
+        if scheduled && !LibTVMaintenanceWindow.contains(.now) { throw LibTVUpdateError.windowClosed }
+        await engine?.beginRuntimeMaintenance()
+        cliUpdate.phase = "waiting"
+        cliUpdate.message = "等待现有任务结束；已暂停领取新任务…"
+        saveCLIUpdate()
+        let deadline = Date().addingTimeInterval(30 * 60)
+        if let engine {
+            while !(await engine.runtimeSwitchReady()) {
+                if scheduled && !LibTVMaintenanceWindow.contains(.now) { throw LibTVUpdateError.windowClosed }
+                guard Date() < deadline else { throw LibTVUpdateError.drainTimeout }
+                try await Task.sleep(for: .seconds(1))
+            }
+        }
+        cliUpdate.phase = "activating"
+        cliUpdate.message = "正在切换 CLI…"
+        saveCLIUpdate()
+        let record: LibTVRuntimeRecord
+        if rollback { record = try await rollbackRuntime() }
+        else {
+            guard let candidate else { throw LibTVRuntimeRegistryError.candidateUnavailable }
+            _ = try await verifyRuntimeContract(candidate)
+            try Task.checkCancellation()
+            if scheduled && !LibTVMaintenanceWindow.contains(.now) { throw LibTVUpdateError.windowClosed }
+            record = try await runtimeRegistry.activateCandidate(expected: candidate.identity)
+            libTVVerification = try Self.verifyRuntime(record)
+        }
+        try Task.checkCancellation()
+        cliUpdate.phase = "validating"
+        cliUpdate.message = "正在验证新版模型参数，完成前保持暂停领取…"
+        saveCLIUpdate()
+        try await bindAndValidateRuntime(record, engine: engine)
+    }
+
+    private func bindAndValidateRuntime(_ record: LibTVRuntimeRecord, engine: RunnerEngine?) async throws {
+        profileRunners = [:]; registeredProfileSignature = ""; lastInventoryRevision = [:]
+        if let engine { try await rebuildProfilesIfSafe(engine) }
+        let refs = profileRegistry.all().filter { $0.enabled && $0.healthy && $0.accountRef != "pending" }.map(\.profileRef)
+        // No registered engine means this is an unpaired installation with no schedulable work.
+        if engine != nil {
+            try await insights.waitForRuntimeCatalogs(profileRefs: refs, runtimePath: record.executablePath)
+            try Task.checkCancellation()
+            registeredProfileSignature = ""
+            if let engine { try await rebuildProfilesIfSafe(engine) }
+        }
+    }
+
+    private func restoreRuntime(_ original: LibTVRuntimeRecord, engine: RunnerEngine?) async throws {
+        guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
+        let restored = try await runtimeRegistry.rollback(expected: original.identity)
+        do { libTVVerification = try Self.verifyRuntime(restored) }
+        catch { libTVVerification = nil; throw error }
+        try await bindAndValidateRuntime(restored, engine: engine)
     }
 
     private func cleanupExecutionsIfNeeded(_ engine: RunnerEngine) async {
@@ -500,7 +548,8 @@ actor AgentRuntime {
             let schemas = await insights.generationSchemas(profileRef: profile.profileRef)
             schemaRegistry.replace(profileRef: profile.profileRef, schemas: schemas)
             profile.detectedMaxConcurrency = insight.detectedMaxConcurrency
-            profile.maxConcurrency = insight.effectiveMaxConcurrency
+            // A stale schema must never be used for claims after a runtime switch or restart.
+            profile.maxConcurrency = await insights.catalogReady(profileRef: profile.profileRef) ? insight.effectiveMaxConcurrency : 0
             profile.planName = insight.plan?.name
             profile.quotaState = insight.quotaState.inventoryValue(snapshot: insight.quota)
             profile.catalogRevision = insight.catalogRevision

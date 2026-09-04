@@ -87,7 +87,10 @@ public struct LibTVRuntimeInstaller: Sendable {
         )
         defer { try? FileManager.default.removeItem(at: operationURL) }
 
-        let (temporaryDownload, response) = try await session.download(from: release.archiveURL)
+        let (temporaryDownload, response) = try await LibTVUpdateDeadline.run(for: .seconds(5 * 60)) {
+            try await session.download(from: release.archiveURL)
+        }
+        try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else {
             throw LibTVRuntimeInstallError.invalidHTTPStatus(-1)
         }
@@ -152,6 +155,7 @@ public struct LibTVRuntimeInstaller: Sendable {
         _ = try await LibTVCLIContract.verify(runtime: identity) { arguments in
             try await probeRunner.run(arguments: arguments, timeout: .seconds(15))
         }
+        try Task.checkCancellation()
         try await registry.stageCandidate(record)
         return record
     }
@@ -345,6 +349,14 @@ public struct LibTVRuntimeInstaller: Sendable {
         process.standardOutput = pipe
         process.standardError = pipe
         try process.run()
+        let watchdog = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: watchdog)
+        defer { watchdog.cancel() }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
