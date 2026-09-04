@@ -1046,6 +1046,10 @@ import Testing
         await engine.beginRuntimeMaintenance()
         await engine.endRuntimeMaintenance()
         #expect(await engine.snapshot().paused)
+        try await engine.setProfileMaxConcurrency(0, profileRef: "p1")
+        #expect(await engine.maintenanceExecutors().isEmpty)
+        try await engine.setProfileMaxConcurrency(1, profileRef: "p1")
+        #expect(await engine.maintenanceExecutors()["p1"] != nil)
     }
 
     private func waitForEvent(_ api: FakeRunnerAPI) async throws {

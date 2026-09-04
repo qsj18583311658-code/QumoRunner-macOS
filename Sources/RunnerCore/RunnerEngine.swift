@@ -216,7 +216,9 @@ public actor RunnerEngine {
     }
 
     public func maintenanceExecutors() -> [String: ProfileExecutor] {
-        profiles.mapValues(\.executor)
+        // A zero-capacity executor cannot acquire a CLI slot. Returning it here
+        // would let housekeeping block the scheduler before schema refresh can run.
+        profiles.filter { $0.value.metadata.maxConcurrency > 0 }.mapValues(\.executor)
     }
 
     public func synchronizeProfiles() async throws -> SyncProfilesResponse {
