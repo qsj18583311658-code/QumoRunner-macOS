@@ -95,6 +95,8 @@ public struct RunnerJob: Codable, Identifiable, Hashable, Sendable {
     public let baseSchemaHash: String?
     public let patchVersion: Int?
     public let effectiveSchemaHash: String?
+    public let runtimeVersion: String?
+    public let runtimeSHA256: String?
     public let payload: [String: JSONPayloadValue]
     public var status: RunnerJobState
     public let runnerID: String?
@@ -123,6 +125,8 @@ public struct RunnerJob: Codable, Identifiable, Hashable, Sendable {
         case baseSchemaHash = "base_schema_hash"
         case patchVersion = "patch_version"
         case effectiveSchemaHash = "effective_schema_hash"
+        case runtimeVersion = "runtime_version"
+        case runtimeSHA256 = "runtime_sha256"
         case payload
         case status
         case runnerID = "runner_id"
@@ -147,6 +151,8 @@ public struct RunnerJob: Codable, Identifiable, Hashable, Sendable {
         baseSchemaHash: String? = nil,
         patchVersion: Int? = nil,
         effectiveSchemaHash: String? = nil,
+        runtimeVersion: String? = nil,
+        runtimeSHA256: String? = nil,
         payload: [String: JSONPayloadValue] = [:],
         runnerID: String? = nil,
         executionProfileRef: String? = nil,
@@ -169,6 +175,8 @@ public struct RunnerJob: Codable, Identifiable, Hashable, Sendable {
         self.baseSchemaHash = baseSchemaHash
         self.patchVersion = patchVersion
         self.effectiveSchemaHash = effectiveSchemaHash
+        self.runtimeVersion = runtimeVersion
+        self.runtimeSHA256 = runtimeSHA256?.lowercased()
         self.payload = payload
         self.status = state
         self.runnerID = runnerID
@@ -180,6 +188,19 @@ public struct RunnerJob: Codable, Identifiable, Hashable, Sendable {
         self.leaseExpiresAt = leaseExpiresAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    /// Accepts both the pinned top-level contract and the payload envelope used during rollout.
+    public var runtimeRequirement: LibTVRuntimeRequirement? {
+        let runtimeObject = payload["runtime"]?.objectValue
+        let version = runtimeVersion
+            ?? payload["runtime_version"]?.stringValue
+            ?? runtimeObject?["version"]?.stringValue
+        let hash = runtimeSHA256
+            ?? payload["runtime_sha256"]?.stringValue
+            ?? runtimeObject?["sha256"]?.stringValue
+        let value = LibTVRuntimeRequirement(version: version, sha256: hash)
+        return value.isEmpty ? nil : value
     }
 }
 
@@ -246,6 +267,11 @@ public enum RunnerControlCommandKind: String, Codable, Sendable {
     case refreshProfiles = "refresh_profiles"
     case refreshInventory = "refresh_inventory"
     case diagnostics
+    case runtimeDiscover = "runtime_discover"
+    case runtimeValidate = "runtime_validate"
+    case runtimeApprove = "runtime_approve"
+    case runtimeActivate = "runtime_activate"
+    case runtimeRollback = "runtime_rollback"
 }
 
 public struct RunnerControlCommand: Codable, Identifiable, Hashable, Sendable {

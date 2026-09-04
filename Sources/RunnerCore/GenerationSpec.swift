@@ -187,16 +187,89 @@ public struct ValidatedLibTVGeneration: Equatable, Sendable {
     public let spec: LibTVGenerationSpecV1
     public let modelName: String
     public let flattenedSettings: [(String, JSONPayloadValue)]
+    public let seedanceCompliancePreflight: SeedanceCompliancePreflight
+
+    public init(
+        spec: LibTVGenerationSpecV1,
+        modelName: String,
+        flattenedSettings: [(String, JSONPayloadValue)],
+        seedanceCompliancePreflight: SeedanceCompliancePreflight = .notRequired()
+    ) {
+        self.spec = spec
+        self.modelName = modelName
+        self.flattenedSettings = flattenedSettings
+        self.seedanceCompliancePreflight = seedanceCompliancePreflight
+    }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.spec == rhs.spec && lhs.modelName == rhs.modelName &&
-            lhs.flattenedSettings.map(SettingPair.init) == rhs.flattenedSettings.map(SettingPair.init)
+            lhs.flattenedSettings.map(SettingPair.init) == rhs.flattenedSettings.map(SettingPair.init) &&
+            lhs.seedanceCompliancePreflight == rhs.seedanceCompliancePreflight
     }
 
     private struct SettingPair: Equatable {
         let key: String
         let value: JSONPayloadValue
         init(_ pair: (String, JSONPayloadValue)) { key = pair.0; value = pair.1 }
+    }
+}
+
+public enum SeedanceCompliancePreflightStatus: String, Codable, Equatable, Sendable {
+    case pending
+    case notRequired = "not_required"
+    case skipped
+    case checking
+    case passed
+    case exempt
+    case rejected
+    case retryableError = "retryable_error"
+    case unknown
+}
+
+/// A deliberately redacted description of Seedance's CLI-owned portrait compliance phase.
+/// Input order is sufficient for the UI to identify the affected slot; artifact identity,
+/// URLs, checksums and the LibTV profile must never cross this boundary.
+public struct SeedanceCompliancePreflight: Equatable, Sendable {
+    public let status: SeedanceCompliancePreflightStatus
+    public let inputOrders: [Int]
+
+    public init(status: SeedanceCompliancePreflightStatus, inputOrders: [Int]) {
+        self.status = status
+        self.inputOrders = Array(Set(inputOrders)).sorted()
+    }
+
+    public static func notRequired(inputOrders: [Int] = []) -> Self {
+        .init(status: .notRequired, inputOrders: inputOrders)
+    }
+
+    public var requiresCheck: Bool { status == .checking }
+
+    public func payload(status override: SeedanceCompliancePreflightStatus? = nil) -> JSONPayloadValue {
+        let reportedStatus = override ?? status
+        let checked: Int
+        switch reportedStatus {
+        case .passed, .exempt:
+            checked = inputOrders.count
+        case .pending, .checking, .rejected, .retryableError, .unknown, .skipped, .notRequired:
+            checked = 0
+        }
+        var result: [String: JSONPayloadValue] = [
+            "type": .string("seedance_compliance"),
+            "status": .string(reportedStatus.rawValue),
+            "checked": .number(Double(checked)),
+            "total": .number(Double(inputOrders.count)),
+        ]
+        // A CLI-level rejection or service error does not identify the rejected image. Omitting
+        // the list prevents the UI from falsely attributing a failure to every input slot.
+        if ![.rejected, .retryableError, .unknown].contains(reportedStatus) {
+            result["inputs"] = .array(inputOrders.map { order in
+                .object([
+                    "order": .number(Double(order)),
+                    "status": .string(reportedStatus.rawValue),
+                ])
+            })
+        }
+        return .object(result)
     }
 }
 
@@ -250,8 +323,47 @@ public enum LibTVGenerationValidator {
         return ValidatedLibTVGeneration(
             spec: spec,
             modelName: snapshot.modelName,
-            flattenedSettings: (basic + advanced).sorted { $0.0 < $1.0 }
+            flattenedSettings: (basic + advanced).sorted { $0.0 < $1.0 },
+            seedanceCompliancePreflight: seedanceCompliancePreflight(
+                spec: spec,
+                properties: properties
+            )
         )
+    }
+
+    private static func seedanceCompliancePreflight(
+        spec: LibTVGenerationSpecV1,
+        properties: [String: JSONPayloadValue]
+    ) -> SeedanceCompliancePreflight {
+        guard spec.modality == .video else { return .notRequired() }
+        let imageOrders = spec.inputs
+            .filter { $0.kind == "image" }
+            .map(\.order)
+            .sorted()
+        guard !imageOrders.isEmpty else { return .notRequired() }
+        guard schemaBoolean(properties["portrait"]) == true,
+              schemaBoolean(properties["autoCompliance"]?.objectValue?["enable"]) == true else {
+            return .notRequired(inputOrders: imageOrders)
+        }
+        if explicitlyDisabled(spec.advancedSettings["autoCompliance"]) {
+            return .init(status: .skipped, inputOrders: imageOrders)
+        }
+        return .init(status: .checking, inputOrders: imageOrders)
+    }
+
+    private static func schemaBoolean(_ value: JSONPayloadValue?) -> Bool? {
+        switch value {
+        case .bool(let value): value
+        case .number(let value) where value == 0 || value == 1: value == 1
+        default: nil
+        }
+    }
+
+    private static func explicitlyDisabled(_ value: JSONPayloadValue?) -> Bool {
+        switch value {
+        case .bool(false), .number(0): true
+        default: false
+        }
     }
 
     private static func schemaObject(_ raw: JSONPayloadValue) -> [String: JSONPayloadValue] {
@@ -331,7 +443,13 @@ public enum LibTVGenerationValidator {
     private static func configuredKeys(_ value: JSONPayloadValue?, mode: String?) -> Set<String> {
         if let keys = value?.arrayValue?.compactMap(\.stringValue) { return Set(keys) }
         let object = value?.objectValue ?? [:]
-        return Set((object[mode ?? ""]?.arrayValue ?? []).compactMap(\.stringValue))
+        let selected = object[mode ?? ""]?.arrayValue
+            ?? (mode == nil ? object["default"]?.arrayValue : nil)
+            ?? (mode == nil ? object["*"]?.arrayValue : nil)
+            ?? (mode == nil ? object["text2image"]?.arrayValue : nil)
+            ?? (mode == nil ? object["text2video"]?.arrayValue : nil)
+            ?? []
+        return Set(selected.compactMap(\.stringValue))
     }
 
     private static func validatedSettings(
@@ -357,7 +475,21 @@ public enum LibTVGenerationValidator {
 
     private static func enumAllows(_ value: JSONPayloadValue, property: [String: JSONPayloadValue]) -> Bool {
         guard let values = property["enum"]?.arrayValue, !values.isEmpty else { return true }
-        return values.map(enumValue).contains(value)
+        return values.map(enumValue).contains { allowed in
+            allowed == value || switchValuesAreEquivalent(allowed, value)
+        }
+    }
+
+    /// LibTV switch schemas commonly declare 0/1 while clients serialize false/true.
+    /// Treat only those exact pairs as equivalent; no other enum coercion is allowed.
+    private static func switchValuesAreEquivalent(_ lhs: JSONPayloadValue, _ rhs: JSONPayloadValue) -> Bool {
+        switch (lhs, rhs) {
+        case (.number(0), .bool(false)), (.bool(false), .number(0)),
+             (.number(1), .bool(true)), (.bool(true), .number(1)):
+            true
+        default:
+            false
+        }
     }
 
     private static func enumValue(_ value: JSONPayloadValue) -> JSONPayloadValue {

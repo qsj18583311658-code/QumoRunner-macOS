@@ -11,6 +11,31 @@ private actor TaskSnapshotRecorder {
 
 @Suite struct SubmissionJournalTests {
     @Test
+    func testRuntimeIdentityIsWriteOnceAndSurvivesReopen() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let databaseURL = directory.appendingPathComponent("runner.sqlite")
+        let first = LibTVRuntimeIdentity(version: "1.0.2", sha256: String(repeating: "a", count: 64))
+        do {
+            let journal = try SubmissionJournal(databaseURL: databaseURL)
+            _ = try await journal.recordSubmissionIntent(
+                jobID: "runtime-job",
+                profileRef: "profile-1",
+                requestFingerprint: "hash",
+                runtime: first
+            )
+            await #expect(throws: SubmissionJournalError.self) {
+                try await journal.bindRuntime(
+                    jobID: "runtime-job",
+                    runtime: .init(version: "1.1.0", sha256: String(repeating: "b", count: 64))
+                )
+            }
+        }
+        let reopened = try SubmissionJournal(databaseURL: databaseURL)
+        #expect(try await reopened.record(for: "runtime-job")?.runtimeIdentity == first)
+    }
+
+    @Test
     func testIntentIsIdempotentAndUnknownSubmissionNeedsReview() async throws {
         let directory = try TestSupport.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -106,8 +131,82 @@ private actor TaskSnapshotRecorder {
         #expect(try await journal.recoveryAction(for: "job-invalid-arguments") == .alreadyTerminal(.failed))
     }
 
+    @Test(arguments: [
+        ("seedance-compliance-rejected-zh", "seedance_compliance_rejected", SeedanceComplianceCLIErrorClassification.rejected),
+        ("seedance-compliance-retryable-en", "seedance_compliance_retryable_error", SeedanceComplianceCLIErrorClassification.retryableError),
+    ])
+    func testExplicitSeedanceComplianceFailureBeforeRemoteIDIsKnownFailed(
+        scenario: String,
+        rawStatus: String,
+        classification: SeedanceComplianceCLIErrorClassification
+    ) async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        let executor = SubmissionExecutor(
+            profile: ProfileExecutor(
+                profileRef: "profile-1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            ),
+            journal: journal
+        )
+
+        let outcome = try await executor.submit(
+            jobID: "job-\(classification.rawValue)",
+            profileRef: "profile-1",
+            requestFingerprint: "hash",
+            arguments: [scenario],
+            seedanceCompliancePreflight: .init(status: .checking, inputOrders: [0]),
+            timeout: .seconds(2)
+        )
+
+        guard case .process(_, let snapshot?) = outcome else {
+            Issue.record("Expected a classified compliance failure")
+            return
+        }
+        #expect(snapshot.state == .failed)
+        #expect(snapshot.taskID == nil)
+        #expect(snapshot.rawStatus == rawStatus)
+        #expect(try await journal.recoveryAction(for: "job-\(classification.rawValue)") == .alreadyTerminal(.failed))
+    }
+
+    @Test(arguments: ["seedance-compliance-ambiguous", "ordinary-model-failed"])
+    func testAmbiguousOrOrdinaryFailureBeforeRemoteIDStillNeedsReview(scenario: String) async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        let executor = SubmissionExecutor(
+            profile: ProfileExecutor(
+                profileRef: "profile-1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            ),
+            journal: journal
+        )
+
+        let outcome = try await executor.submit(
+            jobID: "job-\(scenario)",
+            profileRef: "profile-1",
+            requestFingerprint: "hash",
+            arguments: [scenario],
+            seedanceCompliancePreflight: .init(status: .checking, inputOrders: [0]),
+            timeout: .seconds(2)
+        )
+
+        guard case .process(_, nil) = outcome else {
+            Issue.record("Expected an uncertain submission outcome")
+            return
+        }
+        #expect(try await journal.recoveryAction(for: "job-\(scenario)") == .alreadyTerminal(.needsReview))
+    }
+
     @Test
-    func testRemoteTerminalFailureWithNonzeroExitIsKnownFailed() async throws {
+    func testRemoteTerminalFailureRemainsQueryableUntilEngineConfirmsIt() async throws {
         let directory = try TestSupport.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let executable = try TestSupport.fakeLibTV()
@@ -135,7 +234,38 @@ private actor TaskSnapshotRecorder {
         #expect(result.exitCode == 1)
         #expect(snapshot.taskID == "remote-failed-123")
         #expect(snapshot.state == .failed)
-        #expect(try await journal.recoveryAction(for: "job-remote-failed") == .alreadyTerminal(.failed))
+        #expect(try await journal.recoveryAction(for: "job-remote-failed") == .queryRemote(taskID: "remote-failed-123"))
+    }
+
+    @Test
+    func testExplicitReviewReopensSameRemoteIdentityAndRejectsConflicts() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        _ = try await journal.recordSubmissionIntent(
+            jobID: "review-job", profileRef: "profile-1", requestFingerprint: "hash"
+        )
+        try await journal.attachRemoteTask(jobID: "review-job", remoteTaskID: "remote-review")
+        try await journal.markTerminal(jobID: "review-job", state: .needsReview)
+
+        try await journal.resumeRemoteQuery(
+            jobID: "review-job", profileRef: "profile-1", remoteTaskID: "remote-review"
+        )
+        #expect(try await journal.recoveryAction(for: "review-job") == .queryRemote(taskID: "remote-review"))
+
+        do {
+            try await journal.resumeRemoteQuery(
+                jobID: "review-job", profileRef: "profile-1", remoteTaskID: "different-remote"
+            )
+            Issue.record("Expected a remote identity conflict")
+        } catch let error as SubmissionJournalError {
+            guard case .conflictingRemoteTaskID(let stored, let requested) = error else {
+                Issue.record("Expected conflictingRemoteTaskID")
+                return
+            }
+            #expect(stored == "remote-review")
+            #expect(requested == "different-remote")
+        }
     }
 
     @Test

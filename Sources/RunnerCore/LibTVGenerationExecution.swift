@@ -4,10 +4,124 @@ import Foundation
 public struct PreparedLibTVSubmission: Equatable, Sendable {
     public let arguments: [String]
     public let requestFingerprint: String
+    public let parameterDiagnostics: JSONPayloadValue
+    public let seedanceCompliancePreflight: SeedanceCompliancePreflight
 
-    public init(arguments: [String], requestFingerprint: String) {
+    public init(
+        arguments: [String],
+        requestFingerprint: String,
+        parameterDiagnostics: JSONPayloadValue = .object([:]),
+        seedanceCompliancePreflight: SeedanceCompliancePreflight = .notRequired()
+    ) {
         self.arguments = arguments
         self.requestFingerprint = requestFingerprint
+        self.parameterDiagnostics = parameterDiagnostics
+        self.seedanceCompliancePreflight = seedanceCompliancePreflight
+    }
+}
+
+public enum SeedanceComplianceCLIErrorClassification: String, Equatable, Sendable {
+    case rejected
+    case retryableError = "retryable_error"
+    case uncertain
+    case unrelated
+}
+
+/// Pure classifier for failures emitted before LibTV exposes an immutable remote task ID.
+/// It is intentionally scoped to explicit compliance context so ordinary generation/model
+/// failures can never be treated as a compliance rejection or Runtime health signal.
+public enum SeedanceComplianceCLIErrorClassifier {
+    public static func classify(standardOutput: String, standardError: String) -> SeedanceComplianceCLIErrorClassification {
+        let diagnostic = "\(standardError)\n\(standardOutput)"
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !diagnostic.isEmpty, hasComplianceContext(diagnostic) else { return .unrelated }
+
+        if containsAny(diagnostic, retryablePhrases) { return .retryableError }
+        if containsAny(diagnostic, rejectedPhrases) { return .rejected }
+        if containsAny(diagnostic, uncertainPhrases) { return .uncertain }
+        return .unrelated
+    }
+
+    private static func hasComplianceContext(_ value: String) -> Bool {
+        containsAny(value, [
+            "合规", "真人", "肖像", "人物授权", "真人授权", "人物认证", "真人认证",
+            "compliance", "portrait", "human authorization", "person authorization",
+        ])
+    }
+
+    private static func containsAny(_ value: String, _ phrases: [String]) -> Bool {
+        phrases.contains(where: value.contains)
+    }
+
+    private static let rejectedPhrases = [
+        "合规检测未通过", "合规校验未通过", "合规不通过", "未通过合规", "素材不合规", "不符合合规",
+        "未经授权", "未获得授权", "没有授权", "授权失败", "未授权真人", "真人未授权", "人物未授权", "肖像未授权",
+        "真人认证失败", "人物认证失败", "compliance rejected", "compliance check rejected",
+        "not compliant", "compliance violation", "unauthorized portrait", "portrait is not authorized",
+        "portrait not authorized", "human is not authorized", "authorization failed",
+    ]
+
+    private static let retryablePhrases = [
+        "合规检测服务暂时不可用", "合规校验服务暂时不可用", "合规服务暂时不可用",
+        "检测服务异常", "检测服务繁忙", "合规服务异常", "合规服务繁忙", "稍后重试",
+        "compliance service temporarily unavailable", "compliance check service temporarily unavailable",
+        "compliance service unavailable", "compliance service busy", "portrait service unavailable",
+        "try again later", "temporarily unavailable", "service timeout", "request timeout", "timed out",
+        "network error", "econnreset", "etimedout",
+    ]
+
+    private static let uncertainPhrases = [
+        "合规检测失败", "合规校验失败", "真人检测失败", "肖像检测失败",
+        "compliance check failed", "portrait check failed", "portrait detection failed",
+    ]
+}
+
+public enum LibTVParameterDiagnosticsBuilder {
+    /// Builds a prompt-free, artifact-free description of what the Runner actually validated
+    /// and expanded for LibTV. This can be persisted with the task without exposing media keys.
+    public static func build(
+        job: RunnerJob,
+        validated: ValidatedLibTVGeneration
+    ) throws -> JSONPayloadValue {
+        let runnerFingerprint = try CanonicalJSON.sha256(.object(job.payload))
+        let serverFingerprint = job.result?.objectValue?["parameter_diagnostics"]?
+            .objectValue?["server_spec_fingerprint"]?.stringValue
+        let flattenedSettings = Dictionary(
+            uniqueKeysWithValues: validated.flattenedSettings.map { ($0.0, $0.1) }
+        )
+        let inputs = validated.spec.inputs
+            .sorted(by: { $0.order < $1.order })
+            .map { input in
+                JSONPayloadValue.object([
+                    "kind": .string(input.kind),
+                    "role": .string(input.role),
+                    "order": .number(Double(input.order)),
+                ])
+            }
+        var diagnostics: [String: JSONPayloadValue] = [
+            "contract_version": .string("libtv-generation-spec-v1"),
+            "status": .string(serverFingerprint == nil ? "runner_verified" : (serverFingerprint == runnerFingerprint ? "matched" : "mismatch")),
+            "runner_spec_fingerprint": .string(runnerFingerprint),
+            "model_ref": .string(validated.spec.modelRef),
+            "model_name": .string(validated.modelName),
+            "modality": .string(validated.spec.modality.rawValue),
+            "count": .number(Double(validated.spec.count)),
+            "mode_type": validated.spec.modeType.map(JSONPayloadValue.string) ?? .null,
+            "base_schema_hash": job.baseSchemaHash.map(JSONPayloadValue.string) ?? .null,
+            "effective_schema_hash": .string(validated.spec.effectiveSchemaHash),
+            "patch_version": job.patchVersion.map { .number(Double($0)) } ?? .null,
+            "settings": .object(validated.spec.settings),
+            "advanced_settings": .object(validated.spec.advancedSettings),
+            "flattened_settings": .object(flattenedSettings),
+            "inputs": .array(inputs),
+            "prompt_present": .bool(!(validated.spec.prompt?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)),
+        ]
+        if let serverFingerprint {
+            diagnostics["server_spec_fingerprint"] = .string(serverFingerprint)
+            diagnostics["fingerprints_match"] = .bool(serverFingerprint == runnerFingerprint)
+        }
+        return .object(diagnostics)
     }
 }
 
@@ -375,7 +489,9 @@ public actor LibTVGenerationPreparer: GenerationJobPreparing {
         )
         return PreparedLibTVSubmission(
             arguments: arguments,
-            requestFingerprint: try requestFingerprint(job: job, spec: validated.spec)
+            requestFingerprint: try requestFingerprint(job: job, spec: validated.spec),
+            parameterDiagnostics: try LibTVParameterDiagnosticsBuilder.build(job: job, validated: validated),
+            seedanceCompliancePreflight: validated.seedanceCompliancePreflight
         )
     }
 

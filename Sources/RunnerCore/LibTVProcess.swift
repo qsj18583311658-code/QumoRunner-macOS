@@ -328,6 +328,9 @@ public actor LibTVProcessRunner {
 public actor ProfileExecutor {
     public let profileRef: String
     private let runner: LibTVProcessRunner
+    private var runtimeBindings: [String: URL] = [:]
+    private var runtimeRunners: [String: LibTVProcessRunner] = [:]
+    private var activeRunners: [String: LibTVProcessRunner] = [:]
     private let limiter: GlobalConcurrencyLimiter
     private var maxConcurrency = 1
     private var activeCount = 0
@@ -359,9 +362,11 @@ public actor ProfileExecutor {
             releaseProfile()
             throw error
         }
+        let selectedRunner = await runnerForExecution(jobID: jobID)
         activeJobIDs.insert(jobID)
+        activeRunners[jobID] = selectedRunner
         do {
-            let result = try await runner.run(
+            let result = try await selectedRunner.run(
                 processID: jobID,
                 arguments: arguments,
                 additionalEnvironment: additionalEnvironment,
@@ -370,11 +375,13 @@ public actor ProfileExecutor {
             )
             await limiter.release()
             activeJobIDs.remove(jobID)
+            activeRunners.removeValue(forKey: jobID)
             releaseProfile()
             return result
         } catch {
             await limiter.release()
             activeJobIDs.remove(jobID)
+            activeRunners.removeValue(forKey: jobID)
             releaseProfile()
             throw error
         }
@@ -395,9 +402,27 @@ public actor ProfileExecutor {
 
     @discardableResult
     public func stopTracking(jobID: String) async -> Bool {
-        guard activeJobIDs.contains(jobID) else { return false }
-        return await runner.stopActive(processID: jobID, reason: .requestedAfterLaunch)
+        guard activeJobIDs.contains(jobID), let selectedRunner = activeRunners[jobID] else { return false }
+        return await selectedRunner.stopActive(processID: jobID, reason: .requestedAfterLaunch)
     }
+
+    public func bindRuntime(jobID: String, executableURL: URL) throws {
+        let value = executableURL.standardizedFileURL
+        guard value.isFileURL, value.path.hasPrefix("/"),
+              FileManager.default.isExecutableFile(atPath: value.path) else {
+            throw LibTVProcessError.executableMissing(value.path)
+        }
+        if let existing = runtimeBindings[jobID], existing != value {
+            throw LibTVRuntimeRegistryError.invalidRegistry("job \(jobID) is already bound to another Runtime")
+        }
+        runtimeBindings[jobID] = value
+    }
+
+    public func unbindRuntime(jobID: String) {
+        runtimeBindings.removeValue(forKey: jobID)
+    }
+
+    public func defaultRuntimeExecutableURL() -> URL { runner.executableURL }
 
     /// Shrinking is drain-only: existing executions keep their permits and new waiters resume
     /// only after the active count drops below the new limit.
@@ -409,6 +434,21 @@ public actor ProfileExecutor {
     public func configuredMaxConcurrency() -> Int { maxConcurrency }
 
     public func runningJobIDs() -> Set<String> { activeJobIDs }
+
+    private func runnerForExecution(jobID: String) async -> LibTVProcessRunner {
+        let binding = runtimeBindings
+            .filter { jobID == $0.key || jobID.hasPrefix($0.key + ":") }
+            .max(by: { $0.key.count < $1.key.count })?.value
+        guard let binding else { return runner }
+        if let cached = runtimeRunners[binding.path] { return cached }
+        let value = LibTVProcessRunner(
+            executableURL: binding,
+            homeURL: runner.homeURL,
+            defaultTimeout: runner.defaultTimeout
+        )
+        runtimeRunners[binding.path] = value
+        return value
+    }
 
     private func acquireProfile() async throws {
         if activeCount < maxConcurrency {

@@ -4,6 +4,36 @@ import Testing
 
 @Suite struct RunnerEngineTests {
     @Test
+    func testRuntimeValidationCommandDefersClaimUntilNextHeartbeat() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let api = FakeRunnerAPI(
+            job: RunnerJob(id: "runtime-canary", state: .queued, capability: "image"),
+            heartbeatCommands: [[RunnerControlCommand(id: "validate", kind: .runtimeValidate)], []]
+        )
+        let engine = RunnerEngine(
+            api: api,
+            journal: try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite")),
+            hostname: "test",
+            version: "1"
+        )
+        await engine.register(
+            profile: RunnerProfile(profileRef: "p1", accountRef: "a1", displayName: "A", capabilities: ["image"]),
+            executor: ProfileExecutor(
+                profileRef: "p1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            )
+        )
+        try await engine.tick()
+        #expect(await api.claimCount() == 0)
+        try await engine.tick()
+        #expect(await api.claimCount() == 1)
+    }
+
+    @Test
     func testPauseHeartbeatsButDoesNotClaimAndResumeRunsJob() async throws {
         let directory = try TestSupport.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -89,6 +119,48 @@ import Testing
     }
 
     @Test
+    func testKnownRemoteImmediateSuccessReportsRunningBeforeArtifactUpload() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let artifact = directory.appendingPathComponent("rechecked.png")
+        try Data("rechecked image".utf8).write(to: artifact)
+        let api = FakeRunnerAPI(job: RunnerJob(
+            id: "known-success",
+            state: .leased,
+            idempotencyKey: "known-success-idem",
+            capability: "image",
+            payload: [:],
+            remoteTaskID: "remote-existing"
+        ))
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        let engine = RunnerEngine(
+            api: api,
+            journal: journal,
+            commandBuilder: KnownRemoteSuccessBuilder(successPath: artifact.path),
+            hostname: "test",
+            version: "1",
+            pollInterval: .milliseconds(10)
+        )
+        await engine.register(
+            profile: RunnerProfile(profileRef: "p1", accountRef: "a1", displayName: "A", capabilities: ["image"]),
+            executor: ProfileExecutor(
+                profileRef: "p1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            )
+        )
+
+        try await engine.tick()
+        try await waitForEvent(api)
+
+        #expect(await api.recordedEvents().map(\.status) == [.running, .succeeded])
+        #expect(await api.uploadCount() == 1)
+        #expect(try await journal.recoveryAction(for: "known-success") == .alreadyTerminal(.succeeded))
+    }
+
+    @Test
     func testKnownRemoteTaskRecoveryUsesPersistedNodeLayoutInsteadOfMissingTaskCommand() async throws {
         let directory = try TestSupport.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -130,7 +202,12 @@ import Testing
             if await api.recordedEvents().contains(where: { $0.status == .running }) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        let invocation = try String(contentsOf: directory.appendingPathComponent("invocations.log"), encoding: .utf8)
+        let invocationURL = directory.appendingPathComponent("invocations.log")
+        for _ in 0..<100 {
+            if FileManager.default.fileExists(atPath: invocationURL.path) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let invocation = try String(contentsOf: invocationURL, encoding: .utf8)
         #expect(invocation.contains("node generate-b696a21c1472ab0b7b60 --project 86ba514d50e34c7dbd2ef571a2885383 --group qumo-job-recovery"))
         #expect(!invocation.contains("task info"))
         #expect(!invocation.contains("--run"))
@@ -154,9 +231,10 @@ import Testing
         let engine = RunnerEngine(
             api: api,
             journal: journal,
-            commandBuilder: PayloadArgumentsCommandBuilder(),
+            commandBuilder: PayloadArgumentsCommandBuilder(queryPrefix: ["stream-failed-query"]),
             hostname: "test",
-            version: "1"
+            version: "1",
+            pollInterval: .milliseconds(10)
         )
         await engine.register(
             profile: RunnerProfile(profileRef: "p1", accountRef: "a", displayName: "A", capabilities: ["image"]),
@@ -186,6 +264,151 @@ import Testing
         #expect(finalEvents.last?.status == .failed)
         #expect(finalEvents.last?.remoteTaskID == "remote-stream-123")
         #expect(await api.claimCount() == 1)
+    }
+
+    @Test
+    func testSeedanceComplianceEventsMoveFromCheckingToPassedWhenRemoteIDAppears() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let preflight = SeedanceCompliancePreflight(status: .checking, inputOrders: [3, 1])
+        let api = FakeRunnerAPI(job: RunnerJob(
+            id: "seedance-pass",
+            state: .leased,
+            capability: "video"
+        ))
+        let engine = RunnerEngine(
+            api: api,
+            journal: try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite")),
+            commandBuilder: PayloadArgumentsCommandBuilder(queryPrefix: ["stream-failed-query"]),
+            generationPreparer: StaticGenerationPreparer(prepared: .init(
+                arguments: ["stream-task", "0.2"],
+                requestFingerprint: "seedance-pass-fingerprint",
+                seedanceCompliancePreflight: preflight
+            )),
+            hostname: "test",
+            version: "1",
+            pollInterval: .milliseconds(10),
+            terminalConfirmationCount: 1
+        )
+        await engine.register(
+            profile: RunnerProfile(profileRef: "p1", accountRef: "a", displayName: "A", capabilities: ["video"]),
+            executor: ProfileExecutor(
+                profileRef: "p1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            )
+        )
+
+        try await engine.tick()
+        for _ in 0..<100 {
+            if await api.recordedEvents().contains(where: { $0.remoteTaskID == "remote-stream-123" }) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let earlyEvents = await api.recordedEvents()
+        let submitting = try #require(earlyEvents.first(where: { $0.status == .submitting }))
+        let running = try #require(earlyEvents.first(where: { $0.remoteTaskID == "remote-stream-123" }))
+        #expect(submitting.result?.objectValue?["preflight"]?.objectValue?["status"] == .string("checking"))
+        #expect(submitting.result?.objectValue?["preflight"]?.objectValue?["checked"] == .number(0))
+        #expect(submitting.result?.objectValue?["preflight"]?.objectValue?["total"] == .number(2))
+        #expect(running.result?.objectValue?["preflight"]?.objectValue?["status"] == .string("passed"))
+        #expect(running.result?.objectValue?["preflight"]?.objectValue?["checked"] == .number(2))
+        #expect(running.result?.objectValue?["preflight"]?.objectValue?["total"] == .number(2))
+        #expect(submitting.result?.objectValue?["preflight"]?.objectValue?["inputs"] == .array([
+            .object(["order": .number(1), "status": .string("checking")]),
+            .object(["order": .number(3), "status": .string("checking")]),
+        ]))
+        #expect(running.result?.objectValue?["preflight"]?.objectValue?["inputs"] == .array([
+            .object(["order": .number(1), "status": .string("passed")]),
+            .object(["order": .number(3), "status": .string("passed")]),
+        ]))
+        try await waitForEvent(api)
+    }
+
+    @Test
+    func testSeedanceComplianceRejectionIsReportedFailedWithoutRunningEvent() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        let api = FakeRunnerAPI(job: RunnerJob(
+            id: "seedance-rejected",
+            state: .leased,
+            capability: "video"
+        ))
+        let engine = RunnerEngine(
+            api: api,
+            journal: journal,
+            generationPreparer: StaticGenerationPreparer(prepared: .init(
+                arguments: ["seedance-compliance-rejected-zh"],
+                requestFingerprint: "seedance-rejected-fingerprint",
+                seedanceCompliancePreflight: .init(status: .checking, inputOrders: [0])
+            )),
+            hostname: "test",
+            version: "1"
+        )
+        await engine.register(
+            profile: RunnerProfile(profileRef: "p1", accountRef: "a", displayName: "A", capabilities: ["video"]),
+            executor: ProfileExecutor(
+                profileRef: "p1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            )
+        )
+
+        try await engine.tick()
+        try await waitForEvent(api)
+        let events = await api.recordedEvents()
+        #expect(events.map(\.status) == [.submitting, .failed])
+        #expect(!events.contains(where: { $0.status == .running }))
+        #expect(events.last?.result?.objectValue?["preflight"]?.objectValue?["status"] == .string("rejected"))
+        #expect(events.last?.result?.objectValue?["preflight"]?.objectValue?["inputs"] == nil)
+        #expect(events.last?.remoteTaskID == nil)
+        #expect(try await journal.recoveryAction(for: "seedance-rejected") == .alreadyTerminal(.failed))
+    }
+
+    @Test
+    func testTransientCancelledRemoteResultIsRequeriedAndRecoveredAsSuccess() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let artifact = directory.appendingPathComponent("recovered.png")
+        try Data("recovered image".utf8).write(to: artifact)
+        let api = FakeRunnerAPI(job: RunnerJob(
+            id: "transient-cancelled",
+            state: .leased,
+            capability: "image",
+            payload: ["arguments": .array([.string("cancelled")])]
+        ))
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        let engine = RunnerEngine(
+            api: api,
+            journal: journal,
+            commandBuilder: CancelledThenSuccessBuilder(successPath: artifact.path),
+            hostname: "test",
+            version: "1",
+            pollInterval: .milliseconds(10)
+        )
+        await engine.register(
+            profile: RunnerProfile(profileRef: "p1", accountRef: "a", displayName: "A", capabilities: ["image"]),
+            executor: ProfileExecutor(
+                profileRef: "p1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 1)
+            )
+        )
+
+        try await engine.tick()
+        try await waitForEvent(api)
+
+        let events = await api.recordedEvents()
+        #expect(events.map(\.status) == [.submitting, .running, .succeeded])
+        #expect(!events.contains(where: { $0.status == .cancelled || $0.status == .needsReview }))
+        #expect(await api.uploadCount() == 1)
+        #expect(try await journal.recoveryAction(for: "transient-cancelled") == .alreadyTerminal(.succeeded))
     }
 
     @Test
@@ -676,6 +899,10 @@ import Testing
             if await api.eventLog().contains(where: { $0.event.status == .running }) { break }
             try await Task.sleep(for: .milliseconds(10))
         }
+        for _ in 0..<100 {
+            if await limiter.activeCount() == 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(await engine.snapshot().activeJobs["tracking-slot"] == "p1")
         #expect(await limiter.activeCount() == 0)
         try await engine.stopTracking(jobID: "tracking-slot")
@@ -781,7 +1008,7 @@ private struct QueryOnlyBuilder: LibTVCommandBuilding {
     }
 
     func queryArguments(remoteTaskID: String, for job: RunnerJob) throws -> [String] {
-        ["running"]
+        ["running-id", remoteTaskID]
     }
 }
 
@@ -789,6 +1016,31 @@ private struct TransitionBuilder: LibTVCommandBuilding {
     let successPath: String
 
     func submissionArguments(for job: RunnerJob) throws -> [String] { ["running"] }
+    func queryArguments(remoteTaskID: String, for job: RunnerJob) throws -> [String] {
+        ["success-local", successPath]
+    }
+}
+
+private struct KnownRemoteSuccessBuilder: LibTVCommandBuilding {
+    let successPath: String
+
+    func submissionArguments(for job: RunnerJob) throws -> [String] {
+        Issue.record("A known remote task must never be submitted")
+        return ["crash"]
+    }
+
+    func queryArguments(remoteTaskID: String, for job: RunnerJob) throws -> [String] {
+        ["success-local-id", remoteTaskID, successPath]
+    }
+}
+
+private struct CancelledThenSuccessBuilder: LibTVCommandBuilding {
+    let successPath: String
+
+    func submissionArguments(for job: RunnerJob) throws -> [String] {
+        try PayloadArgumentsCommandBuilder().submissionArguments(for: job)
+    }
+
     func queryArguments(remoteTaskID: String, for job: RunnerJob) throws -> [String] {
         ["success-local", successPath]
     }
@@ -811,6 +1063,14 @@ private struct FailingGenerationPreparer: GenerationJobPreparing {
 
     func prepare(job: RunnerJob, profileRef: String, executor: ProfileExecutor) async throws -> PreparedLibTVSubmission {
         throw PreparationFailure()
+    }
+}
+
+private struct StaticGenerationPreparer: GenerationJobPreparing {
+    let prepared: PreparedLibTVSubmission
+
+    func prepare(job: RunnerJob, profileRef: String, executor: ProfileExecutor) async throws -> PreparedLibTVSubmission {
+        prepared
     }
 }
 

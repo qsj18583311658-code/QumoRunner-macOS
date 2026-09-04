@@ -16,6 +16,8 @@ actor AgentRuntime {
     private let runnerRoot: URL
     private let schemaRegistry = LibTVSchemaRegistry()
     private let projectStore: LibTVExecutionProjectStore
+    private var runtimeRegistry: LibTVRuntimeRegistry?
+    private var runtimeInstaller: LibTVRuntimeInstaller?
     private var api: RunnerAPIClient?
     private var transport: AgentAPITransport?
     private var engine: RunnerEngine?
@@ -34,6 +36,7 @@ actor AgentRuntime {
     private var metadataMigrationAttempted: Set<String> = []
     private var logs: [AgentLog] = []
     private var lastExecutionCleanupAt: Date = .distantPast
+    private var pendingRuntimeValidationCommand: (command: RunnerControlCommand, record: LibTVRuntimeRecord?, startedAt: Date)?
 
     init(root: URL, insights: AccountInsightCoordinator) {
         self.insights = insights
@@ -52,8 +55,10 @@ actor AgentRuntime {
     func runForever() async {
         await verifyLibTV()
         appendLog(.info, "QumoRunnerAgent 已启动")
-        if let journal, let pending = try? await journal.pendingRecoveryRecords(), !pending.isEmpty {
-            appendLog(.warning, "发现 \(pending.count) 个待恢复提交；已知远端任务只会查询，不会重新提交。")
+        if let journal, let pending = try? await journal.pendingRecoveryRecords() {
+            if !pending.isEmpty { appendLog(.warning, "发现 \(pending.count) 个待恢复提交；已知远端任务只会查询，不会重新提交。") }
+            let retained = (try? await journal.retainedRuntimeIdentities()) ?? Set(pending.compactMap(\.runtimeIdentity))
+            _ = try? await runtimeRegistry?.prune(retaining: retained)
         }
         while !Task.isCancelled {
             await tick()
@@ -170,6 +175,31 @@ actor AgentRuntime {
         case "libtv_diagnostic":
             await verifyLibTV()
             return libTVVerification.map { "LibTV \($0.version) 的 SHA-256 与严格代码签名校验通过。" } ?? "LibTV 校验失败：\(libTVVerificationError ?? "未知错误")"
+        case "install_runtime_candidate":
+            guard let runtimeInstaller,
+                  let version = values["version"],
+                  let rawURL = values["url"],
+                  let url = URL(string: rawURL) else { throw AgentRuntimeError.libTVMetadata("Runtime 参数不完整") }
+            let record = try await runtimeInstaller.downloadAndStage(.init(
+                version: version,
+                archiveURL: url,
+                archiveSHA256: values["archive_sha256"],
+                executableSHA256: values["sha256"]
+            ))
+            return "LibTV \(record.identity.version) 候选版本已完成下载、签名与完整性验证，尚未启用。"
+        case "activate_runtime_candidate":
+            guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
+            guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+            let record = try await runtimeRegistry.activateCandidate()
+            do { libTVVerification = try Self.verifyRuntime(record) }
+            catch { _ = try? await runtimeRegistry.rollback(); throw error }
+            profileRunners = [:]; registeredProfileSignature = ""
+            return "LibTV \(record.identity.version) 已原子切换为 active。"
+        case "rollback_runtime":
+            guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+            let record = try await rollbackRuntime()
+            profileRunners = [:]; registeredProfileSignature = ""
+            return "已回滚到 LibTV \(record.identity.version)。"
         case "prepare_shutdown": await engine?.pause(); state = .paused; return "后台服务已准备退出。"
         default: return "命令已由后台服务接收。"
         }
@@ -244,6 +274,8 @@ actor AgentRuntime {
             await insights.tick(profiles: profileRegistry.all())
             try await rebuildProfilesIfSafe(engine)
             await syncInventoriesIfNeeded()
+            await refreshRuntimeValidationReports()
+            await advanceRuntimeValidationMaintenance()
             let before = await engine.snapshot().activeJobs
             for (jobID, profileRef) in lastActiveJobs where before[jobID] == nil {
                 await insights.refresh(profileRef: profileRef, reason: .taskFinished, includeCatalog: false)
@@ -298,6 +330,7 @@ actor AgentRuntime {
             api: observingTransport,
             journal: journal,
             generationPreparer: preparer,
+            runtimeProvider: runtimeRegistry,
             globalMaxConcurrency: concurrencyLimit,
             hostname: ProcessInfo.processInfo.hostName,
             version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0",
@@ -338,9 +371,12 @@ actor AgentRuntime {
             registeredProfileSignature = signature
             return
         }
+        guard let activeRuntime = try await runtimeRegistry?.activeRuntime() else {
+            throw AgentRuntimeError.libTVUnverified("active Runtime 不可用")
+        }
         for profile in profiles {
             let paths = try profileRegistry.prepare(profileRef: profile.profileRef).1
-            let runner = profileRunners[profile.profileRef] ?? LibTVProcessRunner(executableURL: AgentBundleLayout.libTVExecutableURL, homeURL: paths.home)
+            let runner = profileRunners[profile.profileRef] ?? LibTVProcessRunner(executableURL: activeRuntime.executableURL, homeURL: paths.home)
             profileRunners[profile.profileRef] = runner
             await insights.register(profile: profile, runner: runner)
             let executor = ProfileExecutor(profileRef: profile.profileRef, runner: runner, limiter: limiter)
@@ -358,12 +394,13 @@ actor AgentRuntime {
 
     private func repairLegacyProfileMetadata() async {
         guard libTVVerification != nil else { return }
+        guard let activeRuntime = try? await runtimeRegistry?.activeRuntime() else { return }
         for profile in profileRegistry.all()
         where profile.accountRef == profile.profileRef && metadataMigrationAttempted.insert(profile.profileRef).inserted {
             do {
                 let paths = try profileRegistry.prepare(profileRef: profile.profileRef).1
                 let runner = profileRunners[profile.profileRef]
-                    ?? LibTVProcessRunner(executableURL: AgentBundleLayout.libTVExecutableURL, homeURL: paths.home, defaultTimeout: .seconds(60))
+                    ?? LibTVProcessRunner(executableURL: activeRuntime.executableURL, homeURL: paths.home, defaultTimeout: .seconds(60))
                 profileRunners[profile.profileRef] = runner
                 let result = try await runner.run(arguments: ["account", "info"])
                 guard result.exitCode == 0 else { continue }
@@ -412,39 +449,397 @@ actor AgentRuntime {
 
     private func applyServiceCommands(_ commands: [RunnerControlCommand]) async {
         for command in commands {
-            switch command.kind {
-            case .refreshProfiles:
-                registeredProfileSignature = ""
-            case .refreshInventory:
-                lastInventoryRevision = [:]
-                for profile in profileRegistry.all() where profile.accountRef != "pending" {
-                    await insights.refresh(profileRef: profile.profileRef, reason: .manual, includeCatalog: true)
+            do {
+                var evidence: LibTVRuntimeRecord?
+                var deferAcknowledgement = false
+                switch command.kind {
+                case .refreshProfiles:
+                    registeredProfileSignature = ""
+                case .refreshInventory:
+                    lastInventoryRevision = [:]
+                    for profile in profileRegistry.all() where profile.accountRef != "pending" {
+                        await insights.refresh(profileRef: profile.profileRef, reason: .manual, includeCatalog: true)
+                    }
+                case .healthCheck:
+                    for profile in profileRegistry.all() where profile.accountRef != "pending" {
+                        await insights.refresh(profileRef: profile.profileRef, reason: .manual, includeCatalog: false)
+                    }
+                case .diagnostics:
+                    await verifyLibTV()
+                case .runtimeValidate:
+                    if let pending = pendingRuntimeValidationCommand, pending.command.id == command.id {
+                        evidence = pending.record
+                        deferAcknowledgement = true
+                    } else if (await engine?.snapshot().activeJobs.isEmpty) == false {
+                        // Stop claiming normal work server-side and let every
+                        // already-running task finish on its pinned Runtime.
+                        pendingRuntimeValidationCommand = (command, nil, .now)
+                        deferAcknowledgement = true
+                    } else {
+                        evidence = try await prepareRuntimeValidation(command)
+                    }
+                case .runtimeActivate:
+                    evidence = try await activateRuntime(command)
+                case .runtimeRollback:
+                    guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+                    evidence = try await rollbackRuntime()
+                    profileRunners = [:]; registeredProfileSignature = ""
+                case .runtimeDiscover, .runtimeApprove:
+                    evidence = try await runtimeRegistry?.activeRuntime()
+                default:
+                    break
                 }
-            case .healthCheck:
-                for profile in profileRegistry.all() where profile.accountRef != "pending" {
-                    await insights.refresh(profileRef: profile.profileRef, reason: .manual, includeCatalog: false)
+                if !deferAcknowledgement {
+                    try await transport?.acknowledge(
+                        commandID: command.id,
+                        acknowledgement: runtimeAcknowledgement(status: "completed", detail: nil, record: evidence)
+                    )
                 }
-            case .diagnostics:
-                await verifyLibTV()
-            default:
-                break
+            } catch {
+                let active: LibTVRuntimeRecord?
+                if let runtimeRegistry { active = try? await runtimeRegistry.activeRuntime() }
+                else { active = nil }
+                try? await transport?.acknowledge(
+                    commandID: command.id,
+                    acknowledgement: runtimeAcknowledgement(
+                        status: "failed",
+                        detail: error.localizedDescription,
+                        record: active
+                    )
+                )
+                appendLog(.error, "服务命令 \(command.kind.rawValue) 执行失败：\(error.localizedDescription)")
             }
         }
     }
 
+    private func advanceRuntimeValidationMaintenance() async {
+        guard let pending = pendingRuntimeValidationCommand, let engine, let transport else { return }
+        let activeJobs = await engine.snapshot().activeJobs
+        if Date().timeIntervalSince(pending.startedAt) >= 30 * 60 {
+            let detail = "等待现有任务自然排空超过 30 分钟；未取消任何运行中任务。"
+            if let validationID = pending.command.payload["validation_id"]?.stringValue,
+               let record = pending.record,
+               let failed = try? RunnerRuntimeValidationReport(
+                   validationID: validationID,
+                   status: "failed",
+                   record: record,
+                   detail: detail
+               ) { try? await runtimeRegistry?.upsertRuntimeValidationReport(failed) }
+            do {
+                try await transport.acknowledge(
+                    commandID: pending.command.id,
+                    acknowledgement: runtimeAcknowledgement(status: "failed", detail: detail, record: pending.record)
+                )
+                pendingRuntimeValidationCommand = nil
+            } catch {
+                appendLog(.warning, "Runtime 维护窗超时，失败 ACK 将在下一轮重试：\(error.localizedDescription)")
+            }
+            return
+        }
+        if activeJobs.isEmpty {
+            do {
+                let record = try await prepareRuntimeValidation(pending.command)
+                try await transport.acknowledge(
+                    commandID: pending.command.id,
+                    acknowledgement: runtimeAcknowledgement(status: "completed", detail: nil, record: record)
+                )
+                pendingRuntimeValidationCommand = nil
+            } catch {
+                appendLog(.warning, "Runtime 维护窗完成，但命令 ACK 将在下一轮重试：\(error.localizedDescription)")
+            }
+            return
+        }
+    }
+
+    private func installRuntimeCandidate(_ command: RunnerControlCommand) async throws -> LibTVRuntimeRecord {
+        guard let runtimeInstaller,
+              let version = command.payload["version"]?.stringValue,
+              let rawURL = command.payload["download_url"]?.stringValue,
+              let url = URL(string: rawURL) else {
+            throw AgentRuntimeError.libTVMetadata("Runtime command payload 不完整")
+        }
+        return try await runtimeInstaller.downloadAndStage(.init(
+            version: version,
+            archiveURL: url,
+            archiveSHA256: command.payload["archive_sha256"]?.stringValue,
+            executableSHA256: command.payload["sha256"]?.stringValue
+        ))
+    }
+
+    private func prepareRuntimeValidation(_ command: RunnerControlCommand) async throws -> LibTVRuntimeRecord {
+        guard let validationID = command.payload["validation_id"]?.stringValue,
+              let profileRef = command.payload["validation_profile_ref"]?.stringValue,
+              let runtimeRegistry else {
+            throw AgentRuntimeError.libTVMetadata("Runtime validation_id 或隔离 Profile 缺失")
+        }
+        let record = try await installRuntimeCandidate(command)
+        let paths = try profileRegistry.prepare(profileRef: profileRef).1
+        let candidateRunner = LibTVProcessRunner(executableURL: record.executableURL, homeURL: paths.home)
+
+        let account = try await candidateRunner.run(arguments: ["account", "info"], timeout: .seconds(90))
+        guard account.exitCode == 0, !account.requiresManualReview else {
+            throw AgentRuntimeError.libTVMetadata("候选 Runtime 无法读取隔离账号：\(account.standardError)")
+        }
+        let accountList = try await candidateRunner.run(arguments: ["account", "list"], timeout: .seconds(90))
+        guard accountList.exitCode == 0, !accountList.requiresManualReview else {
+            throw AgentRuntimeError.libTVMetadata("候选 Runtime 无法读取账号列表：\(accountList.standardError)")
+        }
+
+        let candidates = try await ModelCatalogService().fetch(
+            using: candidateRunner,
+            existing: [],
+            forceSchemaRefresh: true
+        )
+        let production = await insights.generationSchemas(profileRef: profileRef)
+        let schemaDiff = Self.runtimeSchemaDiff(production: production, candidate: candidates)
+        try Self.persistCandidateSchemas(
+            candidates,
+            validationID: validationID,
+            stagingRoot: runtimeRegistry.stagingURL
+        )
+        let testReport: [String: JSONPayloadValue] = [
+            "checks": .object([
+                "version": .bool(true),
+                "login": .bool(true),
+                "account": .bool(true),
+                "model_catalog": .bool(true),
+                "schema_snapshot": .bool(true),
+            ]),
+            "validation_profile_ref": .string(profileRef),
+            "candidate_model_count": .number(Double(candidates.count)),
+            "production_model_count": .number(Double(production.count)),
+        ]
+        try await runtimeRegistry.upsertRuntimeValidationReport(
+            RunnerRuntimeValidationReport(
+                validationID: validationID,
+                status: "running",
+                record: record,
+                testReport: testReport,
+                schemaDiff: schemaDiff
+            )
+        )
+        return record
+    }
+
+    private nonisolated static func runtimeSchemaDiff(
+        production: [LibTVModelSchemaSnapshot],
+        candidate: [CatalogCandidate]
+    ) -> [String: JSONPayloadValue] {
+        let old = Dictionary(uniqueKeysWithValues: production.map { ($0.modelRef, $0.schemaHash) })
+        let new = Dictionary(uniqueKeysWithValues: candidate.map { ($0.modelRef, $0.schemaHash) })
+        let added = new.keys.filter { old[$0] == nil }.sorted().map(JSONPayloadValue.string)
+        let removed = old.keys.filter { new[$0] == nil }.sorted().map(JSONPayloadValue.string)
+        let changed = new.keys.compactMap { modelRef -> JSONPayloadValue? in
+            guard let oldHash = old[modelRef], let newHash = new[modelRef], oldHash != newHash else { return nil }
+            return .object([
+                "model_ref": .string(modelRef),
+                "previous_schema_hash": .string(oldHash),
+                "candidate_schema_hash": .string(newHash),
+            ])
+        }.sorted { ($0.objectValue?["model_ref"]?.stringValue ?? "") < ($1.objectValue?["model_ref"]?.stringValue ?? "") }
+        return ["added": .array(added), "removed": .array(removed), "changed": .array(changed)]
+    }
+
+    private nonisolated static func persistCandidateSchemas(
+        _ candidates: [CatalogCandidate],
+        validationID: String,
+        stagingRoot: URL
+    ) throws {
+        guard UUID(uuidString: validationID) != nil else {
+            throw AgentRuntimeError.libTVMetadata("Runtime validation_id 非法")
+        }
+        let directory = stagingRoot
+            .appending(path: validationID, directoryHint: .isDirectory)
+            .appending(path: "schemas", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        for candidate in candidates {
+            guard candidate.modelRef.range(of: #"^[A-Za-z0-9._-]+$"#, options: .regularExpression) != nil,
+                  let schema = candidate.rawSchema else { continue }
+            let data = try JSONEncoder().encode(schema)
+            let url = directory.appending(path: "\(candidate.modelRef).json")
+            try data.write(to: url, options: .atomic)
+            guard chmod(url.path, 0o600) == 0 else {
+                throw AgentRuntimeError.libTVMetadata("无法保护候选 Schema 文件权限")
+            }
+        }
+    }
+
+    private func activateRuntime(_ command: RunnerControlCommand) async throws -> LibTVRuntimeRecord {
+        guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
+        guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+        let requestedVersion = command.payload["version"]?.stringValue
+        let requestedHash = command.payload["sha256"]?.stringValue
+        let snapshot = try await runtimeRegistry.snapshot()
+        if snapshot.candidate?.version != requestedVersion
+            || (requestedHash != nil && snapshot.candidate?.sha256 != requestedHash) {
+            _ = try await installRuntimeCandidate(command)
+        }
+        let activated = try await runtimeRegistry.activateCandidate()
+        do {
+            libTVVerification = try Self.verifyRuntime(activated)
+        } catch {
+            _ = try? await runtimeRegistry.rollback()
+            await verifyLibTV()
+            throw error
+        }
+        profileRunners = [:]
+        registeredProfileSignature = ""
+        return activated
+    }
+
+    private func rollbackRuntime() async throws -> LibTVRuntimeRecord {
+        guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
+        let rolledBack = try await runtimeRegistry.rollback()
+        do {
+            libTVVerification = try Self.verifyRuntime(rolledBack)
+            return rolledBack
+        } catch {
+            _ = try? await runtimeRegistry.rollback()
+            await verifyLibTV()
+            throw error
+        }
+    }
+
+    private func refreshRuntimeValidationReports() async {
+        guard let runtimeRegistry, let transport else { return }
+        let jobs = await transport.jobsSnapshot()
+        for report in await runtimeRegistry.pendingRuntimeValidationReports() where report.status == "running" {
+            let matching = jobs.filter {
+                $0.payload["runtime_validation_id"]?.stringValue == report.validationID
+            }
+            let image = matching.first { $0.payload["modality"]?.stringValue == "image" }
+            let video = matching.first { $0.payload["modality"]?.stringValue == "video" }
+            guard let image, let video else { continue }
+            if [image, video].contains(where: { $0.state.isTerminal && $0.state != .succeeded }) {
+                if let record = try? await runtimeRegistry.resolveRuntime(
+                    requirement: .init(version: report.version, sha256: report.sha256),
+                    persisted: nil,
+                    remoteTaskExists: false
+                ), let failed = try? RunnerRuntimeValidationReport(
+                    validationID: report.validationID,
+                    status: "failed",
+                    record: record,
+                    detail: "Runtime canary image/video task failed or needs review."
+                ) { try? await runtimeRegistry.upsertRuntimeValidationReport(failed) }
+                continue
+            }
+            guard image.state == .succeeded, video.state == .succeeded,
+                  image.resultArtifactID != nil, video.resultArtifactID != nil,
+                  let record = try? await runtimeRegistry.resolveRuntime(
+                    requirement: .init(version: report.version, sha256: report.sha256),
+                    persisted: nil,
+                    remoteTaskExists: false
+                  ) else { continue }
+            let videoSettings = video.payload["settings"]?.objectValue ?? [:]
+            let canaryReport: [String: JSONPayloadValue] = [
+                "image": .object(validationEvidence(for: image)),
+                "video": .object(validationEvidence(for: video).merging([
+                    "duration_seconds": videoSettings["duration"] ?? videoSettings["duration_seconds"] ?? .number(5),
+                    "resolution": videoSettings["resolution"] ?? .string("720p"),
+                    "audio": videoSettings["audio"] ?? videoSettings["generate_audio"] ?? .bool(false),
+                ]) { _, new in new }),
+            ]
+            let testReport = report.testReport.merging(canaryReport) { _, new in new }
+            if let passed = try? RunnerRuntimeValidationReport(
+                validationID: report.validationID,
+                status: "passed",
+                record: record,
+                testReport: testReport,
+                schemaDiff: report.schemaDiff
+            ) { try? await runtimeRegistry.upsertRuntimeValidationReport(passed) }
+        }
+    }
+
+    private func validationEvidence(for job: RunnerJob) -> [String: JSONPayloadValue] {
+        let result = job.result?.objectValue ?? [:]
+        let diagnostics = result["parameter_diagnostics"]?.objectValue ?? [:]
+        return [
+            "job_id": .string(job.id),
+            "status": .string(job.state.rawValue),
+            "remote_task_id": .string(job.remoteTaskID ?? ""),
+            "artifact_archived": .bool(job.resultArtifactID != nil),
+            "artifact_downloaded": .bool(job.resultArtifactID != nil),
+            "parameter_fingerprint_status": diagnostics["status"] ?? .string("missing"),
+            "progress_percent": result["progress_percent"] ?? .null,
+        ]
+    }
+
+    private func runtimeAcknowledgement(
+        status: String,
+        detail: String?,
+        record: LibTVRuntimeRecord?
+    ) -> CommandAcknowledgement {
+        guard let record else { return .init(status: status, detail: detail) }
+        return .init(
+            status: status,
+            detail: detail,
+            runtimeVersion: record.identity.version,
+            runtimeSHA256: record.identity.sha256,
+            runtimePlatform: "macos-arm64",
+            runtimeVerified: record.strictSignatureValid
+                && record.teamIdentifier == LibTVRuntimeInstaller.officialTeamIdentifier,
+            runnerProtocolVersion: "1"
+        )
+    }
+
     private func verifyLibTV() async {
         do {
-            try Self.verifyArchitectureAndTeam(executableURL: AgentBundleLayout.libTVExecutableURL)
-            libTVVerification = try LibTVBinaryVerifier.verify(executableURL: AgentBundleLayout.libTVExecutableURL, expectedVersion: Self.expectedLibTVVersion, expectedSHA256: Self.expectedLibTVSHA256)
+            let bundledVerification = try LibTVBinaryVerifier.verify(
+                executableURL: AgentBundleLayout.libTVExecutableURL,
+                expectedVersion: Self.expectedLibTVVersion,
+                expectedSHA256: Self.expectedLibTVSHA256,
+                requireThinArm64: true,
+                expectedTeamIdentifier: LibTVRuntimeInstaller.officialTeamIdentifier
+            )
+            if runtimeRegistry == nil {
+                let fallback = LibTVRuntimeRecord(
+                    identity: .init(version: Self.expectedLibTVVersion, sha256: Self.expectedLibTVSHA256),
+                    executableURL: AgentBundleLayout.libTVExecutableURL,
+                    source: .bundled,
+                    teamIdentifier: bundledVerification.teamIdentifier,
+                    cdHash: bundledVerification.cdHash,
+                    strictSignatureValid: bundledVerification.strictSignatureValid
+                )
+                let registry = LibTVRuntimeRegistry(
+                    rootURL: runnerRoot.appending(path: "Runtimes", directoryHint: .isDirectory),
+                    bundledFallback: fallback
+                )
+                try await registry.bootstrap()
+                runtimeRegistry = registry
+                runtimeInstaller = LibTVRuntimeInstaller(registry: registry)
+            }
+            guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
+            var active = try await runtimeRegistry.activeRuntime()
+            do {
+                libTVVerification = try Self.verifyRuntime(active)
+            } catch {
+                active = try await runtimeRegistry.recoverToBundledFallback()
+                libTVVerification = try Self.verifyRuntime(active)
+                appendLog(.warning, "active Runtime 校验失败，已原子回退到 App 内置 1.0.2：\(error.localizedDescription)")
+            }
             libTVVerificationError = nil
             registeredProfileSignature = ""
-            appendLog(.info, "LibTV 1.0.2 完整性校验通过")
+            appendLog(.info, "LibTV \(active.identity.version) Runtime 完整性校验通过")
         } catch {
             libTVVerification = nil
             libTVVerificationError = error.localizedDescription
             state = .degraded
             appendLog(.error, "LibTV 完整性校验失败：\(error.localizedDescription)")
         }
+    }
+
+    private nonisolated static func verifyRuntime(_ record: LibTVRuntimeRecord) throws -> LibTVBinaryVerification {
+        try LibTVBinaryVerifier.verify(
+            executableURL: record.executableURL,
+            expectedVersion: record.identity.version,
+            expectedSHA256: record.identity.sha256,
+            requireThinArm64: true,
+            expectedTeamIdentifier: LibTVRuntimeInstaller.officialTeamIdentifier
+        )
     }
 
     private nonisolated static func verifyArchitectureAndTeam(executableURL: URL) throws {

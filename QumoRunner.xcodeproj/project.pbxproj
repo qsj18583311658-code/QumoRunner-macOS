@@ -10,6 +10,7 @@
 		01559A05497EA6CF0FC9761A /* AccountInsightParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546E4982D13ACFC1514AEC10 /* AccountInsightParserTests.swift */; };
 		0161160F3067518505083586 /* QumoRunnerAgentMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009892DC579B3109CEEAA4B3 /* QumoRunnerAgentMain.swift */; };
 		026A6D9C2DDD9E6A1DE79B03 /* DiagnosticExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E795BA97A6C60318C01E302 /* DiagnosticExporter.swift */; };
+		03476B20043944F7DAEEE063 /* LibTVRuntimeInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99464EF22FA3C8057D72E9A2 /* LibTVRuntimeInstaller.swift */; };
 		0669BBFD06F3143DAF3BE885 /* RunnerAgentProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914728211E5A7CF33B77AD77 /* RunnerAgentProtocol.swift */; };
 		0A0A676194887411CA913615 /* QumoRunnerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832583503CDD49D35216046 /* QumoRunnerApp.swift */; };
 		0A1081864D8E654CB1910E19 /* ModelCatalogParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AE501F0325730682F7670EF /* ModelCatalogParserTests.swift */; };
@@ -80,6 +81,7 @@
 		ED63AB10E19FC943F7666D85 /* AccountProfileAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 510918E6969425684AF91BCA /* AccountProfileAPIService.swift */; };
 		F70C4E5350A69521A3945477 /* LibTVBinaryVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB4F52D47B5E28AFFD0F34EB /* LibTVBinaryVerifier.swift */; };
 		FAAEAC1131AFF02C4D3E2260 /* AgentProfileRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9318561368011A28345FBC8 /* AgentProfileRegistry.swift */; };
+		FABC7C91946731EB7281E95E /* LibTVRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF785DBA807D201E72FA723 /* LibTVRuntime.swift */; };
 		FC6F146AA1A66B3D6940E9AF /* AccountInsightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC31FD72308126783A9C23BD /* AccountInsightModels.swift */; };
 /* End PBXBuildFile section */
 
@@ -168,6 +170,7 @@
 		56A67FD94C35A5EFC2ACAD71 /* ModelCatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogService.swift; sourceTree = "<group>"; };
 		5CFAA5DB8EF798A3B241CE86 /* JobsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobsView.swift; sourceTree = "<group>"; };
 		6B2EA5C62DD9E9FDE5A2B4B0 /* AgentConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentConfigurationStore.swift; sourceTree = "<group>"; };
+		6CF785DBA807D201E72FA723 /* LibTVRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVRuntime.swift; sourceTree = "<group>"; };
 		6E795BA97A6C60318C01E302 /* DiagnosticExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticExporter.swift; sourceTree = "<group>"; };
 		6ECD4B49BC144AE7096CE1C8 /* RunnerConfigurationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerConfigurationStore.swift; sourceTree = "<group>"; };
 		7B912E525D3560C768625FE5 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
@@ -177,6 +180,7 @@
 		834F01549D9726CA3E521ADE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		914728211E5A7CF33B77AD77 /* RunnerAgentProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAgentProtocol.swift; sourceTree = "<group>"; };
 		92337B29C7EA9E6EFE84531E /* RunnerAppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerAppStore.swift; sourceTree = "<group>"; };
+		99464EF22FA3C8057D72E9A2 /* LibTVRuntimeInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVRuntimeInstaller.swift; sourceTree = "<group>"; };
 		9CA79113206D257E2AE6142C /* GlobalModelCatalogRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalModelCatalogRow.swift; sourceTree = "<group>"; };
 		9F4BF09391096A54E649CAFB /* AccountInsightCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountInsightCoordinator.swift; sourceTree = "<group>"; };
 		A6E27150120C56A11D616601 /* ModelCatalogHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalogHeader.swift; sourceTree = "<group>"; };
@@ -395,6 +399,8 @@
 				BA250F1E57420A25ECA8A22B /* LibTVGenerationExecution.swift */,
 				E3C51D17E9BB57288FBC0960 /* LibTVOutputParser.swift */,
 				BAF9769139C6866AC09C7E34 /* LibTVProcess.swift */,
+				6CF785DBA807D201E72FA723 /* LibTVRuntime.swift */,
+				99464EF22FA3C8057D72E9A2 /* LibTVRuntimeInstaller.swift */,
 				DC1B565FC71B1E9985718967 /* Models.swift */,
 				4E4E200F05AD1749524464D8 /* ProfileStorage.swift */,
 				8073E8913127E06FA75E4614 /* RunnerAPI.swift */,
@@ -762,6 +768,8 @@
 				D658BEDBB75420DBFD53B900 /* LibTVGenerationExecution.swift in Sources */,
 				AE0B6D767B93CE135BF94B42 /* LibTVOutputParser.swift in Sources */,
 				E7DB5F3EB3F86339D49D95A5 /* LibTVProcess.swift in Sources */,
+				FABC7C91946731EB7281E95E /* LibTVRuntime.swift in Sources */,
+				03476B20043944F7DAEEE063 /* LibTVRuntimeInstaller.swift in Sources */,
 				D3F879F4D84B999E0A377BF4 /* Models.swift in Sources */,
 				A2013FBF081A323BED55B8C9 /* ProfileStorage.swift in Sources */,
 				0CE0AAF6FFD6BF2D9E07730B /* RunnerAPI.swift in Sources */,

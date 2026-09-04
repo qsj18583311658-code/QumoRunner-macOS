@@ -95,7 +95,9 @@ public actor SubmissionExecutor {
         jobID: String,
         profileRef: String,
         requestFingerprint: String,
+        runtime: LibTVRuntimeIdentity? = nil,
         arguments: [String],
+        seedanceCompliancePreflight: SeedanceCompliancePreflight = .notRequired(),
         timeout: Duration? = nil,
         beforeLaunch: @Sendable () async throws -> Void = { },
         onRemoteTask: @escaping @Sendable (String) async throws -> Void = { _ in },
@@ -111,7 +113,8 @@ public actor SubmissionExecutor {
         let inserted = try await journal.recordSubmissionIntent(
             jobID: jobID,
             profileRef: profileRef,
-            requestFingerprint: requestFingerprint
+            requestFingerprint: requestFingerprint,
+            runtime: runtime
         )
         guard inserted else {
             // Covers a concurrent duplicate claim racing between the read and insert.
@@ -174,17 +177,56 @@ public actor SubmissionExecutor {
             return .process(result, snapshot: snapshot)
         }
         let snapshot = try? LibTVOutputParser.parse(result.standardOutput + "\n" + result.standardError)
+        let incrementallyDiscoveredID = await discovery.discoveredID()
+        let discoveredRemoteTaskID = snapshot?.taskID ?? incrementallyDiscoveredID
+        if result.disposition == .exited,
+           discoveredRemoteTaskID == nil,
+           seedanceCompliancePreflight.requiresCheck {
+            let classification = SeedanceComplianceCLIErrorClassifier.classify(
+                standardOutput: result.standardOutput,
+                standardError: result.standardError
+            )
+            switch classification {
+            case .rejected:
+                let complianceFailure = LibTVTaskSnapshot(
+                    taskID: nil,
+                    state: .failed,
+                    loading: false,
+                    progressPercent: nil,
+                    outputs: [],
+                    rawStatus: "seedance_compliance_rejected",
+                    failureReason: "Seedance compliance check rejected one or more image inputs."
+                )
+                try await journal.markTerminal(jobID: jobID, state: .failed)
+                return .process(result, snapshot: complianceFailure)
+            case .retryableError:
+                let serviceFailure = LibTVTaskSnapshot(
+                    taskID: nil,
+                    state: .failed,
+                    loading: false,
+                    progressPercent: nil,
+                    outputs: [],
+                    rawStatus: "seedance_compliance_retryable_error",
+                    failureReason: "Seedance compliance service is temporarily unavailable; automatic resubmission is disabled."
+                )
+                try await journal.markTerminal(jobID: jobID, state: .failed)
+                return .process(result, snapshot: serviceFailure)
+            case .uncertain, .unrelated:
+                break
+            }
+        }
         if result.requiresManualReview || result.disposition == .crashed
             || (result.exitCode != 0 && ![.failed, .cancelled].contains(snapshot?.state)) {
             try await journal.markTerminal(jobID: jobID, state: .needsReview)
             return .process(result, snapshot: nil)
         }
 
-        let incrementallyDiscoveredID = await discovery.discoveredID()
         if let remoteTaskID = snapshot?.taskID ?? incrementallyDiscoveredID {
             try await journal.attachRemoteTask(jobID: jobID, remoteTaskID: remoteTaskID)
         }
-        if let state = snapshot?.state, state.isTerminal {
+        if let state = snapshot?.state,
+           state.isTerminal,
+           (state == .succeeded || (snapshot?.taskID ?? incrementallyDiscoveredID) == nil) {
             try await journal.markTerminal(jobID: jobID, state: state)
         } else if snapshot == nil {
             try await journal.markTerminal(jobID: jobID, state: .needsReview)
@@ -265,8 +307,17 @@ public actor SubmissionExecutor {
             throw error
         }
         let combinedOutput = result.standardOutput + "\n" + result.standardError
-        guard result.disposition == .exited, result.exitCode == 0,
-              let snapshot = try? LibTVOutputParser.parse(combinedOutput) else {
+        let parsedSnapshot = try? LibTVOutputParser.parse(combinedOutput)
+        if let parsedTaskID = parsedSnapshot?.taskID, parsedTaskID != remoteTaskID {
+            try await journal.markTerminal(jobID: jobID, state: .needsReview)
+            return .process(result, snapshot: nil)
+        }
+        let confirmedRemoteFailure = parsedSnapshot.map {
+            [.failed, .cancelled].contains($0.state)
+        } ?? false
+        guard result.disposition == .exited,
+              (result.exitCode == 0 || confirmedRemoteFailure),
+              let snapshot = parsedSnapshot else {
             if isTransientKnownRemoteQueryFailure(result) {
                 // The paid task identity is durable. A temporary canvas/API read failure is not
                 // submission uncertainty and must never force a new generation or terminal state.
@@ -285,7 +336,7 @@ public actor SubmissionExecutor {
             try await journal.markTerminal(jobID: jobID, state: .needsReview)
             return .process(result, snapshot: nil)
         }
-        if snapshot.state.isTerminal {
+        if snapshot.state == .succeeded {
             try await journal.markTerminal(jobID: jobID, state: snapshot.state)
         }
         return .process(result, snapshot: snapshot)

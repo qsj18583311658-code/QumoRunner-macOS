@@ -100,18 +100,22 @@ public actor RunnerEngine {
         let jobID: String
         let profileRef: String
         var remoteTaskID: String?
+        var runtime: LibTVRuntimeIdentity?
+        var seedanceCompliancePreflight: SeedanceCompliancePreflight?
     }
 
     private let api: any RunnerAPITransport
     private let journal: SubmissionJournal
     private let commandBuilder: any LibTVCommandBuilding
     private let generationPreparer: (any GenerationJobPreparing)?
+    private let runtimeProvider: (any LibTVRuntimeProviding)?
     private let artifactArchiver: ArtifactArchiver
     private let hostname: String
     private let version: String
     private let pollInterval: Duration
     private let maximumPollCount: Int
     private let maximumTrackingDuration: Duration
+    private let terminalConfirmationCount: Int
     private let preSubmissionDelay: Duration
     private var profiles: [String: RegisteredProfile] = [:]
     private var activeJobs: [String: ActiveJob] = [:]
@@ -128,19 +132,22 @@ public actor RunnerEngine {
         journal: SubmissionJournal,
         commandBuilder: any LibTVCommandBuilding = RejectingLibTVCommandBuilder(),
         generationPreparer: (any GenerationJobPreparing)? = nil,
+        runtimeProvider: (any LibTVRuntimeProviding)? = nil,
         artifactArchiver: ArtifactArchiver? = nil,
-        globalMaxConcurrency: Int = 4,
+        globalMaxConcurrency: Int = 4,  // Default 4, synced from server configuration
         hostname: String = ProcessInfo.processInfo.hostName,
         version: String,
         pollInterval: Duration = .seconds(5),
         maximumPollCount: Int = 360,
         maximumTrackingDuration: Duration = .seconds(30 * 60),
+        terminalConfirmationCount: Int = 3,
         preSubmissionDelay: Duration = .zero
     ) {
         self.api = api
         self.journal = journal
         self.commandBuilder = commandBuilder
         self.generationPreparer = generationPreparer
+        self.runtimeProvider = runtimeProvider
         self.artifactArchiver = artifactArchiver ?? ArtifactArchiver(transport: api)
         self.globalMaxConcurrency = min(8, max(1, globalMaxConcurrency))
         self.hostname = hostname
@@ -148,6 +155,7 @@ public actor RunnerEngine {
         self.pollInterval = pollInterval
         self.maximumPollCount = max(1, maximumPollCount)
         self.maximumTrackingDuration = maximumTrackingDuration
+        self.terminalConfirmationCount = max(1, terminalConfirmationCount)
         self.preSubmissionDelay = preSubmissionDelay
     }
 
@@ -238,6 +246,8 @@ public actor RunnerEngine {
         defer { tickInProgress = false }
         let enabled = profiles.values.map(\.metadata).filter { $0.enabled && $0.healthy }
         let capabilities = Array(Set(enabled.flatMap(\.capabilities))).sorted()
+        let runtimeHeartbeat = await runtimeProvider?.runtimeHeartbeat()
+        let runtimeValidations = await runtimeProvider?.pendingRuntimeValidationReports() ?? []
         let heartbeat = try await api.heartbeat(RunnerHeartbeatRequest(
             state: serviceState,
             hostname: hostname,
@@ -251,15 +261,46 @@ public actor RunnerEngine {
                     remoteTaskID: $0.remoteTaskID
                 )
             }.sorted { $0.jobID < $1.jobID },
-            globalMaxConcurrency: globalMaxConcurrency
+            globalMaxConcurrency: globalMaxConcurrency,
+            runtimeVersion: runtimeHeartbeat?.active.version,
+            runtimeSHA256: runtimeHeartbeat?.active.sha256,
+            runtimePlatform: runtimeHeartbeat == nil ? nil : "macos-arm64",
+            runtimeVerified: runtimeHeartbeat?.activeVerified,
+            runnerProtocolVersion: runtimeHeartbeat?.protocolVersion,
+            runtime: runtimeHeartbeat.map(RunnerRuntimeBundleHeartbeat.init(metadata:)),
+            runtimeValidations: runtimeValidations
         ))
+        if let acknowledgements = heartbeat.runtimeValidations {
+            await runtimeProvider?.acknowledgeRuntimeValidationReports(acknowledgements)
+        }
+        // Sync global concurrency from server if different
+        if let serverConcurrency = heartbeat.globalMaxConcurrency, serverConcurrency != globalMaxConcurrency {
+            try? setGlobalMaxConcurrency(serverConcurrency)
+        }
+        let runtimeCommandBarrier = heartbeat.commands.contains {
+            switch $0.kind {
+            case .runtimeValidate, .runtimeActivate, .runtimeRollback: true
+            default: false
+            }
+        }
         for command in heartbeat.commands {
+            switch command.kind {
+            case .refreshProfiles, .refreshInventory, .diagnostics, .healthCheck,
+                 .runtimeDiscover, .runtimeValidate, .runtimeApprove, .runtimeActivate,
+                 .runtimeRollback:
+                continue
+            default:
+                break
+            }
             await apply(command)
             try await api.acknowledge(
                 commandID: command.id,
                 acknowledgement: .init()
             )
         }
+        // The server may queue canary jobs in the same transaction as runtime_validate. The Agent
+        // stages/activates after this scheduler call, so claiming must wait until the next tick.
+        guard !runtimeCommandBarrier else { return }
         guard !paused else { return }
 
         for registration in enabled {
@@ -297,7 +338,9 @@ public actor RunnerEngine {
                 activeJobs[job.id] = ActiveJob(
                     jobID: job.id,
                     profileRef: registration.profileRef,
-                    remoteTaskID: job.remoteTaskID
+                    remoteTaskID: job.remoteTaskID,
+                    runtime: nil,
+                    seedanceCompliancePreflight: nil
                 )
                 activePhases[job.id] = job.remoteTaskID == nil ? .leased : .tracking
                 let task = Task { [weak self] in
@@ -363,7 +406,9 @@ public actor RunnerEngine {
             }
         case .healthCheck:
             break
-        case .refreshProfiles, .refreshInventory, .diagnostics:
+        case .refreshProfiles, .refreshInventory, .diagnostics,
+             .runtimeDiscover, .runtimeValidate, .runtimeApprove, .runtimeActivate,
+             .runtimeRollback:
             // AgentRuntime owns these service-level operations. RunnerCore still decodes them so
             // one newer server command cannot invalidate the entire heartbeat response.
             break
@@ -380,6 +425,7 @@ public actor RunnerEngine {
             let remaining = activeJobCount(profileRef: registration.profileRef)
             let configured = profiles[registration.profileRef]?.metadata.maxConcurrency ?? 0
             Task {
+                await registeredExecutor(registration.profileRef)?.unbindRuntime(jobID: job.id)
                 await registeredExecutor(registration.profileRef)?.setMaxConcurrency(
                     max(configured, remaining)
                 )
@@ -387,14 +433,49 @@ public actor RunnerEngine {
         }
         guard let registered = profiles[registration.profileRef] else { return }
         do {
+            let persistedRuntime = try await journal.runtimeIdentity(for: job.id)
+            let selectedRuntime = try await runtimeProvider?.resolveRuntime(
+                requirement: job.runtimeRequirement,
+                persisted: persistedRuntime,
+                remoteTaskExists: job.remoteTaskID != nil
+            )
+            if let selectedRuntime {
+                try await journal.bindJobRuntime(jobID: job.id, runtime: selectedRuntime.identity)
+                try await registered.executor.bindRuntime(
+                    jobID: job.id,
+                    executableURL: selectedRuntime.executableURL
+                )
+                activeJobs[job.id]?.runtime = selectedRuntime.identity
+            }
             let outcome: SubmissionExecutionOutcome
             if let remoteTaskID = job.remoteTaskID {
                 _ = try await journal.recordSubmissionIntent(
                     jobID: job.id,
                     profileRef: registration.profileRef,
-                    requestFingerprint: job.idempotencyKey
+                    requestFingerprint: job.idempotencyKey,
+                    runtime: selectedRuntime?.identity
                 )
-                try await journal.attachRemoteTask(jobID: job.id, remoteTaskID: remoteTaskID)
+                try await journal.resumeRemoteQuery(
+                    jobID: job.id,
+                    profileRef: registration.profileRef,
+                    remoteTaskID: remoteTaskID
+                )
+                // A recheck is claimed as `leased`, even though the paid remote task already
+                // exists. Move the server job back to `running` before querying so an immediate
+                // success can archive its output through the normal artifact endpoints.
+                try didDiscoverRemoteTask(
+                    jobID: job.id,
+                    profileRef: registration.profileRef,
+                    remoteTaskID: remoteTaskID
+                )
+                try await api.postJobEvent(
+                    jobID: job.id,
+                    event: JobEventRequest(
+                        profileRef: registration.profileRef,
+                        status: .running,
+                        remoteTaskID: remoteTaskID
+                    )
+                )
                 outcome = try await registered.submission.queryKnownRemote(
                     jobID: job.id,
                     arguments: try await queryArguments(remoteTaskID: remoteTaskID, for: job)
@@ -406,11 +487,14 @@ public actor RunnerEngine {
                     profileRef: registration.profileRef,
                     executor: registered.executor
                 )
+                activeJobs[job.id]?.seedanceCompliancePreflight = prepared?.seedanceCompliancePreflight
                 outcome = try await registered.submission.submit(
                     jobID: job.id,
                     profileRef: registration.profileRef,
                     requestFingerprint: prepared?.requestFingerprint ?? job.idempotencyKey,
+                    runtime: selectedRuntime?.identity,
                     arguments: try prepared?.arguments ?? commandBuilder.submissionArguments(for: job),
+                    seedanceCompliancePreflight: prepared?.seedanceCompliancePreflight ?? .notRequired(),
                     beforeLaunch: { [weak self, api] in
                         guard let self else { throw CancellationError() }
                         try await self.beginSubmitting(jobID: job.id)
@@ -418,7 +502,8 @@ public actor RunnerEngine {
                             jobID: job.id,
                             event: JobEventRequest(
                                 profileRef: registration.profileRef,
-                                status: .submitting
+                                status: .submitting,
+                                result: prepared.map(Self.submittingResult)
                             )
                         )
                     },
@@ -434,7 +519,8 @@ public actor RunnerEngine {
                             event: JobEventRequest(
                                 profileRef: registration.profileRef,
                                 status: .running,
-                                remoteTaskID: remoteTaskID
+                                remoteTaskID: remoteTaskID,
+                                result: prepared.map(Self.remoteTaskDiscoveredResult)
                             )
                         )
                     },
@@ -477,6 +563,15 @@ public actor RunnerEngine {
                     profileRef: registration.profileRef,
                     status: terminalState,
                     remoteTaskID: activeJobs[job.id]?.remoteTaskID ?? job.remoteTaskID,
+                    result: activeJobs[job.id]?.seedanceCompliancePreflight.map { preflight in
+                        .object([
+                            "preflight": preflight.payload(
+                                status: terminalState == .needsReview && preflight.requiresCheck
+                                    ? .unknown
+                                    : preflight.status
+                            ),
+                        ])
+                    },
                     error: error.localizedDescription
                 )
             )
@@ -485,6 +580,20 @@ public actor RunnerEngine {
 
     private func registeredExecutor(_ profileRef: String) -> ProfileExecutor? {
         profiles[profileRef]?.executor
+    }
+
+    private nonisolated static func submittingResult(_ prepared: PreparedLibTVSubmission) -> JSONPayloadValue {
+        .object([
+            "parameter_diagnostics": prepared.parameterDiagnostics,
+            "preflight": prepared.seedanceCompliancePreflight.payload(),
+        ])
+    }
+
+    private nonisolated static func remoteTaskDiscoveredResult(_ prepared: PreparedLibTVSubmission) -> JSONPayloadValue {
+        let preflight = prepared.seedanceCompliancePreflight
+        return .object([
+            "preflight": preflight.payload(status: preflight.requiresCheck ? .passed : preflight.status),
+        ])
     }
 
     private func beginSubmitting(jobID: String) throws {
@@ -518,18 +627,57 @@ public actor RunnerEngine {
     ) async throws {
         var outcome = initialOutcome
         var polls = 0
+        var pendingTerminalState: RunnerJobState?
+        var terminalObservations = 0
         let clock = ContinuousClock()
         let started = clock.now
         while true {
             if case .process(_, let snapshot?) = outcome, let remoteTaskID = snapshot.taskID {
                 activeJobs[job.id]?.remoteTaskID = remoteTaskID
             }
-            try await report(outcome: outcome, job: job, profileRef: profileRef)
-            guard case .process(_, let snapshot?) = outcome,
-                  snapshot.state == .running,
-                  let remoteTaskID = snapshot.taskID ?? job.remoteTaskID else {
+            guard case .process(_, let snapshot?) = outcome else {
+                try await report(outcome: outcome, job: job, profileRef: profileRef)
                 return
             }
+            let remoteTaskID = snapshot.taskID ?? activeJobs[job.id]?.remoteTaskID ?? job.remoteTaskID
+            if snapshot.state == .succeeded {
+                try await journal.markTerminal(jobID: job.id, state: .succeeded)
+                try await report(outcome: outcome, job: job, profileRef: profileRef)
+                return
+            }
+            if snapshot.state.isTerminal, let remoteTaskID {
+                if pendingTerminalState == snapshot.state {
+                    terminalObservations += 1
+                } else {
+                    pendingTerminalState = snapshot.state
+                    terminalObservations = 1
+                }
+                if terminalObservations >= terminalConfirmationCount {
+                    try await journal.markTerminal(jobID: job.id, state: snapshot.state)
+                    try await report(outcome: outcome, job: job, profileRef: profileRef)
+                    return
+                }
+                activePhases[job.id] = .tracking
+                if polls >= maximumPollCount || started.duration(to: clock.now) >= maximumTrackingDuration {
+                    try await journal.markTerminal(jobID: job.id, state: .needsReview)
+                    try await report(outcome: .needsReview, job: job, profileRef: profileRef)
+                    return
+                }
+                polls += 1
+                try await Task.sleep(for: pollInterval)
+                outcome = try await submission.queryKnownRemote(
+                    jobID: job.id,
+                    arguments: try await queryArguments(remoteTaskID: remoteTaskID, for: job)
+                )
+                continue
+            }
+            guard snapshot.state == .running, let remoteTaskID else {
+                try await report(outcome: outcome, job: job, profileRef: profileRef)
+                return
+            }
+            pendingTerminalState = nil
+            terminalObservations = 0
+            try await report(outcome: outcome, job: job, profileRef: profileRef)
             activePhases[job.id] = .tracking
             if stoppedJobs.contains(job.id) {
                 try await journal.markTerminal(jobID: job.id, state: .needsReview)
@@ -564,13 +712,13 @@ public actor RunnerEngine {
         case .process(let process, let snapshot):
             let status = snapshot?.state ?? .needsReview
             var result: JSONPayloadValue?
+            var resultObject: [String: JSONPayloadValue] = [:]
             if let snapshot {
                 if status == .succeeded {
                     // Stable Canvas artifacts are completed before the succeeded event. The
                     // server never persists LibTV's expiring output URLs as final results.
                     let artifacts = try await archiveOutputs(jobID: job.id, outputs: snapshot.outputs)
-                    result = .object([
-                        "artifacts": .array(artifacts.map { artifact in
+                    resultObject["artifacts"] = .array(artifacts.map { artifact in
                             .object([
                                 "artifact_id": .string(artifact.artifactID),
                                 "content_url": .string(artifact.contentURL.absoluteString),
@@ -578,15 +726,32 @@ public actor RunnerEngine {
                                 "file_size": .number(Double(artifact.fileSize)),
                                 "sha256": .string(artifact.sha256),
                             ])
-                        }),
-                        "progress_percent": snapshot.progressPercent.map(JSONPayloadValue.number) ?? .null,
-                    ])
+                        })
+                    resultObject["progress_percent"] = snapshot.progressPercent.map(JSONPayloadValue.number) ?? .null
                 } else {
-                    result = .object([
-                        "progress_percent": snapshot.progressPercent.map(JSONPayloadValue.number) ?? .null,
-                    ])
+                    resultObject["progress_percent"] = snapshot.progressPercent.map(JSONPayloadValue.number) ?? .null
                 }
             }
+            if let preflight = activeJobs[job.id]?.seedanceCompliancePreflight {
+                let reportedStatus: SeedanceCompliancePreflightStatus
+                switch snapshot?.rawStatus {
+                case "seedance_compliance_rejected": reportedStatus = .rejected
+                case "seedance_compliance_retryable_error": reportedStatus = .retryableError
+                default:
+                    let hasRemoteTask = snapshot?.taskID != nil
+                        || activeJobs[job.id]?.remoteTaskID != nil
+                        || job.remoteTaskID != nil
+                    if preflight.requiresCheck && hasRemoteTask {
+                        reportedStatus = .passed
+                    } else if preflight.requiresCheck && [.failed, .needsReview].contains(status) {
+                        reportedStatus = .unknown
+                    } else {
+                        reportedStatus = preflight.status
+                    }
+                }
+                resultObject["preflight"] = preflight.payload(status: reportedStatus)
+            }
+            if !resultObject.isEmpty { result = .object(resultObject) }
             try await api.postJobEvent(
                 jobID: job.id,
                 event: JobEventRequest(
@@ -623,6 +788,13 @@ public actor RunnerEngine {
                     profileRef: profileRef,
                     status: .needsReview,
                     remoteTaskID: activeJobs[job.id]?.remoteTaskID ?? job.remoteTaskID,
+                    result: activeJobs[job.id]?.seedanceCompliancePreflight.map { preflight in
+                        .object([
+                            "preflight": preflight.payload(
+                                status: preflight.requiresCheck ? .unknown : preflight.status
+                            ),
+                        ])
+                    },
                     error: "Submission state is uncertain; automatic retry is disabled."
                 )
             )

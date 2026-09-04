@@ -73,7 +73,7 @@ final class RunnerAppStore: ObservableObject {
         } catch {
             if snapshot.jobs.isEmpty && snapshot.accounts.isEmpty {
                 loadingState = .failed(error.localizedDescription)
-            } else {
+            } else if showLoading {
                 operationMessage = "刷新失败：\(error.localizedDescription)"
             }
         }

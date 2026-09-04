@@ -147,6 +147,13 @@ public struct RunnerHeartbeatRequest: Codable, Sendable {
     public let activeJobIDs: [String]
     public let activeJobs: [RunnerActiveJobHeartbeat]
     public let globalMaxConcurrency: Int?
+    public let runtimeVersion: String?
+    public let runtimeSHA256: String?
+    public let runtimePlatform: String?
+    public let runtimeVerified: Bool?
+    public let runnerProtocolVersion: String?
+    public let runtime: RunnerRuntimeBundleHeartbeat?
+    public let runtimeValidations: [RunnerRuntimeValidationReport]
     enum CodingKeys: String, CodingKey {
         case state
         case hostname
@@ -155,6 +162,13 @@ public struct RunnerHeartbeatRequest: Codable, Sendable {
         case activeJobIDs = "active_job_ids"
         case activeJobs = "active_jobs"
         case globalMaxConcurrency = "global_max_concurrency"
+        case runtimeVersion = "runtime_version"
+        case runtimeSHA256 = "runtime_sha256"
+        case runtimePlatform = "runtime_platform"
+        case runtimeVerified = "runtime_verified"
+        case runnerProtocolVersion = "runner_protocol_version"
+        case runtime
+        case runtimeValidations = "runtime_validations"
     }
 
     public init(
@@ -164,7 +178,14 @@ public struct RunnerHeartbeatRequest: Codable, Sendable {
         capabilities: [String],
         activeJobIDs: [String],
         activeJobs: [RunnerActiveJobHeartbeat] = [],
-        globalMaxConcurrency: Int? = nil
+        globalMaxConcurrency: Int? = nil,
+        runtimeVersion: String? = nil,
+        runtimeSHA256: String? = nil,
+        runtimePlatform: String? = nil,
+        runtimeVerified: Bool? = nil,
+        runnerProtocolVersion: String? = nil,
+        runtime: RunnerRuntimeBundleHeartbeat? = nil,
+        runtimeValidations: [RunnerRuntimeValidationReport] = []
     ) {
         self.state = state
         self.hostname = hostname
@@ -173,6 +194,106 @@ public struct RunnerHeartbeatRequest: Codable, Sendable {
         self.activeJobIDs = activeJobIDs
         self.activeJobs = activeJobs
         self.globalMaxConcurrency = globalMaxConcurrency
+        self.runtimeVersion = runtimeVersion
+        self.runtimeSHA256 = runtimeSHA256
+        self.runtimePlatform = runtimePlatform
+        self.runtimeVerified = runtimeVerified
+        self.runnerProtocolVersion = runnerProtocolVersion
+        self.runtime = runtime
+        self.runtimeValidations = runtimeValidations
+    }
+}
+
+public struct RunnerRuntimeValidationReport: Codable, Hashable, Sendable {
+    public let validationID: String
+    public let status: String
+    public let version: String
+    public let archiveSHA256: String
+    public let sha256: String
+    public let platform: String
+    public let cdHash: String
+    public let teamID: String
+    public let runnerProtocolVersion: String
+    public let testReport: [String: JSONPayloadValue]
+    public let schemaDiff: [String: JSONPayloadValue]
+    public let detail: String?
+    enum CodingKeys: String, CodingKey {
+        case validationID = "validation_id"
+        case status, version, sha256, platform, detail
+        case archiveSHA256 = "archive_sha256"
+        case cdHash = "cdhash"
+        case teamID = "team_id"
+        case runnerProtocolVersion = "runner_protocol_version"
+        case testReport = "test_report"
+        case schemaDiff = "schema_diff"
+    }
+    public init(validationID: String, status: String, record: LibTVRuntimeRecord, testReport: [String: JSONPayloadValue] = [:], schemaDiff: [String: JSONPayloadValue] = [:], detail: String? = nil) throws {
+        guard let archiveSHA256 = record.archiveSHA256,
+              let cdHash = record.cdHash,
+              let teamID = record.teamIdentifier else {
+            throw LibTVRuntimeRegistryError.invalidRegistry("Runtime validation evidence is incomplete")
+        }
+        self.validationID = validationID
+        self.status = status
+        version = record.identity.version
+        self.archiveSHA256 = archiveSHA256
+        sha256 = record.identity.sha256
+        platform = "macos-arm64"
+        self.cdHash = cdHash
+        self.teamID = teamID
+        runnerProtocolVersion = "1"
+        self.testReport = testReport
+        self.schemaDiff = schemaDiff
+        self.detail = detail
+    }
+}
+
+public struct RunnerRuntimeIdentityHeartbeat: Codable, Hashable, Sendable {
+    public let version: String
+    public let sha256: String
+    public let platform: String
+    public let verified: Bool
+    public let teamID: String?
+    public let cdHash: String?
+    public let `protocol`: String
+    enum CodingKeys: String, CodingKey {
+        case version, sha256, platform, verified, cdHash = "cdhash", `protocol`
+        case teamID = "team_id"
+    }
+    public init(record: LibTVRuntimeRecord, protocolVersion: String) {
+        version = record.identity.version
+        sha256 = record.identity.sha256
+        platform = "macos-arm64"
+        verified = record.strictSignatureValid
+            && record.teamIdentifier == LibTVRuntimeInstaller.officialTeamIdentifier
+        teamID = record.teamIdentifier
+        cdHash = record.cdHash
+        `protocol` = protocolVersion
+    }
+}
+
+public struct RunnerRuntimeBundleHeartbeat: Codable, Hashable, Sendable {
+    public let active: RunnerRuntimeIdentityHeartbeat
+    public let previous: RunnerRuntimeIdentityHeartbeat?
+    public let candidate: RunnerRuntimeIdentityHeartbeat?
+    public let bundledFallback: RunnerRuntimeIdentityHeartbeat?
+    enum CodingKeys: String, CodingKey {
+        case active, previous, candidate
+        case bundledFallback = "bundled_fallback"
+    }
+    public init(metadata: RunnerRuntimeHeartbeat) {
+        let fallbackActive = LibTVRuntimeRecord(
+            identity: metadata.active,
+            executableURL: URL(fileURLWithPath: "/unavailable"),
+            source: .downloaded,
+            teamIdentifier: metadata.activeTeamIdentifier,
+            cdHash: metadata.activeCDHash,
+            strictSignatureValid: metadata.activeStrictSignatureValid
+        )
+        active = .init(record: metadata.activeRecord ?? fallbackActive, protocolVersion: metadata.protocolVersion)
+        previous = metadata.previousRecord.map { .init(record: $0, protocolVersion: metadata.protocolVersion) }
+        candidate = metadata.candidateRecord.map { .init(record: $0, protocolVersion: metadata.protocolVersion) }
+        bundledFallback = metadata.bundledFallbackRecord.map { .init(record: $0, protocolVersion: metadata.protocolVersion) }
     }
 }
 
@@ -187,7 +308,11 @@ public struct RunnerActiveJobHeartbeat: Codable, Hashable, Sendable {
         case remoteTaskID = "remote_task_id"
     }
 
-    public init(jobID: String, profileRef: String, remoteTaskID: String? = nil) {
+    public init(
+        jobID: String,
+        profileRef: String,
+        remoteTaskID: String? = nil
+    ) {
         self.jobID = jobID
         self.profileRef = profileRef
         self.remoteTaskID = remoteTaskID
@@ -200,12 +325,17 @@ public struct RunnerHeartbeatResponse: Codable, Sendable {
     public let leaseSeconds: Int
     public let commands: [RunnerControlCommand]
     public let renewedJobIDs: [String]?
+    public let runtimeValidations: [RunnerRuntimeValidationAcknowledgement]?
+    /// Server-suggested global concurrency. Runner should sync to this value if different.
+    public let globalMaxConcurrency: Int?
     enum CodingKeys: String, CodingKey {
         case ok
         case serverTime = "server_time"
         case leaseSeconds = "lease_seconds"
         case commands
         case renewedJobIDs = "renewed_job_ids"
+        case runtimeValidations = "runtime_validations"
+        case globalMaxConcurrency = "global_max_concurrency"
     }
 
     public init(
@@ -213,14 +343,24 @@ public struct RunnerHeartbeatResponse: Codable, Sendable {
         serverTime: Date,
         leaseSeconds: Int,
         commands: [RunnerControlCommand],
-        renewedJobIDs: [String]? = nil
+        renewedJobIDs: [String]? = nil,
+        runtimeValidations: [RunnerRuntimeValidationAcknowledgement]? = nil,
+        globalMaxConcurrency: Int? = nil
     ) {
         self.ok = ok
         self.serverTime = serverTime
         self.leaseSeconds = leaseSeconds
         self.commands = commands
         self.renewedJobIDs = renewedJobIDs
+        self.runtimeValidations = runtimeValidations
+        self.globalMaxConcurrency = globalMaxConcurrency
     }
+}
+
+public struct RunnerRuntimeValidationAcknowledgement: Codable, Hashable, Sendable {
+    public let id: String
+    public let status: String
+    public let detail: String?
 }
 
 public struct ProfileInventoryRequest: Codable, Hashable, Sendable {
@@ -462,9 +602,35 @@ public struct ProfileModelApprovalResponse: Codable, Hashable, Sendable {
 public struct CommandAcknowledgement: Codable, Sendable {
     public let status: String
     public let detail: String?
-    public init(status: String = "completed", detail: String? = nil) {
+    public let runtimeVersion: String?
+    public let runtimeSHA256: String?
+    public let runtimePlatform: String?
+    public let runtimeVerified: Bool?
+    public let runnerProtocolVersion: String?
+    enum CodingKeys: String, CodingKey {
+        case status, detail
+        case runtimeVersion = "runtime_version"
+        case runtimeSHA256 = "runtime_sha256"
+        case runtimePlatform = "runtime_platform"
+        case runtimeVerified = "runtime_verified"
+        case runnerProtocolVersion = "runner_protocol_version"
+    }
+    public init(
+        status: String = "completed",
+        detail: String? = nil,
+        runtimeVersion: String? = nil,
+        runtimeSHA256: String? = nil,
+        runtimePlatform: String? = nil,
+        runtimeVerified: Bool? = nil,
+        runnerProtocolVersion: String? = nil
+    ) {
         self.status = status
         self.detail = detail
+        self.runtimeVersion = runtimeVersion
+        self.runtimeSHA256 = runtimeSHA256
+        self.runtimePlatform = runtimePlatform
+        self.runtimeVerified = runtimeVerified
+        self.runnerProtocolVersion = runnerProtocolVersion
     }
 }
 

@@ -140,6 +140,274 @@ import Testing
     }
 
     @Test
+    func parameterDiagnosticsMatchServerAndExcludePromptAndArtifactIdentity() throws {
+        let effectiveHash = String(repeating: "e", count: 64)
+        let baseHash = String(repeating: "a", count: 64)
+        let spec = LibTVGenerationSpecV1(
+            modality: .video,
+            modelRef: "video-model",
+            effectiveSchemaHash: effectiveHash,
+            prompt: "confidential campaign prompt",
+            modeType: "image2video",
+            settings: ["ratio": .string("16:9")],
+            inputs: [.init(
+                artifactKey: "private/object/key",
+                kind: "image",
+                role: "first_frame",
+                order: 0,
+                sha256: String(repeating: "b", count: 64)
+            )]
+        )
+        let specPayload = try payload(spec)
+        let serverFingerprint = try CanonicalJSON.sha256(.object(specPayload))
+        let validated = ValidatedLibTVGeneration(
+            spec: spec,
+            modelName: "Video Model",
+            flattenedSettings: [("aspectRatio", .string("16:9"))]
+        )
+        let diagnostics = try LibTVParameterDiagnosticsBuilder.build(
+            job: RunnerJob(
+                id: "job",
+                baseSchemaHash: baseHash,
+                patchVersion: 1,
+                effectiveSchemaHash: effectiveHash,
+                payload: specPayload,
+                result: .object([
+                    "parameter_diagnostics": .object([
+                        "server_spec_fingerprint": .string(serverFingerprint),
+                    ]),
+                ])
+            ),
+            validated: validated
+        )
+
+        let object = diagnostics.objectValue ?? [:]
+        #expect(object["status"] == .string("matched"))
+        #expect(object["fingerprints_match"] == .bool(true))
+        #expect(object["flattened_settings"]?.objectValue?["aspectRatio"] == .string("16:9"))
+        #expect(object["prompt_present"] == .bool(true))
+        let encoded = String(decoding: try CanonicalJSON.data(diagnostics), as: UTF8.self)
+        #expect(!encoded.contains("confidential campaign prompt"))
+        #expect(!encoded.contains("private/object/key"))
+        #expect(!encoded.contains(String(repeating: "b", count: 64)))
+    }
+
+    @Test
+    func seedanceCompliancePreflightIsDerivedFromApprovedLocalSchemaAndRedacted() throws {
+        func schema(portrait: Bool = true, complianceEnabled: Bool = true) -> JSONPayloadValue {
+            .object([
+                "modality": .string("video"),
+                "schema": .object([
+                    "properties": .object([
+                        "portrait": .bool(portrait),
+                        "autoCompliance": .object([
+                            "enable": .bool(complianceEnabled),
+                            "enum": .array([.number(0), .number(1)]),
+                        ]),
+                        "modeType": .object([
+                            "items": .object([
+                                "image2video": .array([.number(1), .number(2)]),
+                            ]),
+                        ]),
+                    ]),
+                    "config": .object([
+                        "advancedSettings": .object([
+                            "image2video": .array([.string("autoCompliance")]),
+                        ]),
+                        "generateTypes": .object(["text": .number(1), "image": .number(2)]),
+                    ]),
+                ]),
+            ])
+        }
+
+        let effectiveHash = String(repeating: "e", count: 64)
+        let privateInput = LibTVGenerationInputV1(
+            artifactKey: "private/customer/portrait.png",
+            kind: "image",
+            role: "reference",
+            order: 7,
+            sha256: String(repeating: "b", count: 64)
+        )
+        let checking = try validate(
+            spec: .init(
+                modality: .video,
+                modelRef: "seedance-2",
+                effectiveSchemaHash: effectiveHash,
+                prompt: "animate",
+                modeType: "image2video",
+                inputs: [privateInput]
+            ),
+            rawSchema: schema(),
+            modelName: "Seedance 2.0"
+        )
+        #expect(checking.seedanceCompliancePreflight.status == .checking)
+        #expect(checking.seedanceCompliancePreflight.inputOrders == [7])
+
+        let skipped = try validate(
+            spec: .init(
+                modality: .video,
+                modelRef: "seedance-2",
+                effectiveSchemaHash: effectiveHash,
+                prompt: "animate",
+                modeType: "image2video",
+                advancedSettings: ["autoCompliance": .number(0)],
+                inputs: [privateInput]
+            ),
+            rawSchema: schema(),
+            modelName: "Seedance 2.0"
+        )
+        #expect(skipped.seedanceCompliancePreflight.status == .skipped)
+
+        let skippedBoolean = try validate(
+            spec: .init(
+                modality: .video,
+                modelRef: "seedance-2",
+                effectiveSchemaHash: effectiveHash,
+                prompt: "animate",
+                modeType: "image2video",
+                advancedSettings: ["autoCompliance": .bool(false)],
+                inputs: [privateInput]
+            ),
+            rawSchema: schema(),
+            modelName: "Seedance 2.0"
+        )
+        #expect(skippedBoolean.seedanceCompliancePreflight.status == .skipped)
+
+        let noImages = try validate(
+            spec: .init(
+                modality: .video,
+                modelRef: "seedance-2",
+                effectiveSchemaHash: effectiveHash,
+                prompt: "text only"
+            ),
+            rawSchema: schema(),
+            modelName: "Seedance 2.0"
+        )
+        #expect(noImages.seedanceCompliancePreflight.status == .notRequired)
+        #expect(noImages.seedanceCompliancePreflight.inputOrders.isEmpty)
+
+        let unsupported = try validate(
+            spec: .init(
+                modality: .video,
+                modelRef: "other-video",
+                effectiveSchemaHash: effectiveHash,
+                prompt: "animate",
+                modeType: "image2video",
+                inputs: [privateInput]
+            ),
+            rawSchema: schema(portrait: false),
+            modelName: "Other Video"
+        )
+        #expect(unsupported.seedanceCompliancePreflight.status == .notRequired)
+
+        let prepared = PreparedLibTVSubmission(
+            arguments: ["node", "--run"],
+            requestFingerprint: "fingerprint",
+            seedanceCompliancePreflight: checking.seedanceCompliancePreflight
+        )
+        let encoded = String(decoding: try CanonicalJSON.data(prepared.seedanceCompliancePreflight.payload()), as: UTF8.self)
+        #expect(encoded == #"{"checked":0,"inputs":[{"order":7,"status":"checking"}],"status":"checking","total":1,"type":"seedance_compliance"}"#)
+        #expect(!encoded.contains("private/customer"))
+        #expect(!encoded.contains(String(repeating: "b", count: 64)))
+        #expect(!encoded.contains("profile"))
+        #expect(!encoded.contains("http"))
+    }
+
+    @Test
+    func seedanceCompliancePayloadAlwaysSatisfiesInputStatusAndCountContract() throws {
+        let preflight = SeedanceCompliancePreflight(status: .checking, inputOrders: [4, 2])
+        let checking = try #require(preflight.payload().objectValue)
+        #expect(checking["checked"] == .number(0))
+        #expect(checking["total"] == .number(2))
+        #expect(checking["inputs"] == .array([
+            .object(["order": .number(2), "status": .string("checking")]),
+            .object(["order": .number(4), "status": .string("checking")]),
+        ]))
+
+        let passed = try #require(preflight.payload(status: .passed).objectValue)
+        #expect(passed["checked"] == .number(2))
+        #expect(passed["total"] == .number(2))
+        #expect(passed["inputs"] == .array([
+            .object(["order": .number(2), "status": .string("passed")]),
+            .object(["order": .number(4), "status": .string("passed")]),
+        ]))
+
+        let skipped = try #require(preflight.payload(status: .skipped).objectValue)
+        #expect(skipped["checked"] == .number(0))
+        #expect(skipped["inputs"] == .array([
+            .object(["order": .number(2), "status": .string("skipped")]),
+            .object(["order": .number(4), "status": .string("skipped")]),
+        ]))
+
+        let notRequired = try #require(preflight.payload(status: .notRequired).objectValue)
+        #expect(notRequired["checked"] == .number(0))
+        #expect(notRequired["inputs"] == .array([
+            .object(["order": .number(2), "status": .string("not_required")]),
+            .object(["order": .number(4), "status": .string("not_required")]),
+        ]))
+
+        for status in [
+            SeedanceCompliancePreflightStatus.rejected,
+            .retryableError,
+            .unknown,
+        ] {
+            let payload = try #require(preflight.payload(status: status).objectValue)
+            #expect(payload["status"] == .string(status.rawValue))
+            #expect(payload["total"] == .number(2))
+            #expect(payload["inputs"] == nil)
+        }
+
+        let completeStatusSet = [
+            "pending", "checking", "passed", "exempt", "rejected", "retryable_error",
+            "unknown", "skipped", "not_required",
+        ]
+        let decoder = JSONDecoder()
+        for rawValue in completeStatusSet {
+            #expect(try decoder.decode(
+                SeedanceCompliancePreflightStatus.self,
+                from: Data("\"\(rawValue)\"".utf8)
+            ).rawValue == rawValue)
+        }
+
+        let encoded = String(decoding: try CanonicalJSON.data(.object(passed)), as: UTF8.self)
+        for forbidden in ["url", "asset", "artifact", "profile", "sha256"] {
+            #expect(!encoded.localizedCaseInsensitiveContains(forbidden))
+        }
+    }
+
+    @Test
+    func seedanceComplianceCLIErrorClassifierIsStrictAndBilingual() {
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "",
+            standardError: "合规检测未通过：素材包含未授权真人"
+        ) == .rejected)
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "",
+            standardError: "Portrait is not authorized for this account"
+        ) == .rejected)
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "",
+            standardError: "合规检测服务暂时不可用，请稍后重试"
+        ) == .retryableError)
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "Compliance check service temporarily unavailable",
+            standardError: ""
+        ) == .retryableError)
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "",
+            standardError: "Seedance 合规检测失败"
+        ) == .uncertain)
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "",
+            standardError: "模型生成失败：推理服务异常"
+        ) == .unrelated)
+        #expect(SeedanceComplianceCLIErrorClassifier.classify(
+            standardOutput: "",
+            standardError: "Runtime signature verification failed"
+        ) == .unrelated)
+    }
+
+    @Test
     func imageNodeArgumentsAreBuiltByTheWhitelistedPureFunction() throws {
         let effectiveHash = String(repeating: "e", count: 64)
         let raw: JSONPayloadValue = .object([
@@ -272,7 +540,9 @@ import Testing
                 ]),
                 "config": .object([
                     "generateTypes": .object(["text": .number(47), "image": .number(48)]),
-                    "settings": .array([.string("duration"), .string("resolution")]),
+                    "settings": .object([
+                        "text2video": .array([.string("duration"), .string("resolution")]),
+                    ]),
                 ]),
                 "rules": .array([
                     .object([

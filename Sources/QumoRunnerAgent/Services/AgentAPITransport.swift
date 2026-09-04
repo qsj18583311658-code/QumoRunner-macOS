@@ -26,7 +26,9 @@ actor AgentAPITransport: RunnerAPITransport, ArtifactAPITransport, ProfileInvent
         let response = try await base.heartbeat(request)
         serviceCommands.append(contentsOf: response.commands.filter {
             switch $0.kind {
-            case .refreshProfiles, .refreshInventory, .diagnostics, .healthCheck: true
+            case .refreshProfiles, .refreshInventory, .diagnostics, .healthCheck,
+                 .runtimeDiscover, .runtimeValidate, .runtimeApprove, .runtimeActivate,
+                 .runtimeRollback: true
             default: false
             }
         })
@@ -43,7 +45,13 @@ actor AgentAPITransport: RunnerAPITransport, ArtifactAPITransport, ProfileInvent
             job.state = event.status
             job.executionProfileRef = event.profileRef
             job.remoteTaskID = event.remoteTaskID ?? job.remoteTaskID
-            job.result = event.result ?? job.result
+            if let incoming = event.result,
+               let currentObject = job.result?.objectValue,
+               let incomingObject = incoming.objectValue {
+                job.result = .object(currentObject.merging(incomingObject) { _, latest in latest })
+            } else {
+                job.result = event.result ?? job.result
+            }
             job.error = event.error
             job.updatedAt = .now
             jobs[jobID] = job
@@ -73,7 +81,12 @@ actor AgentAPITransport: RunnerAPITransport, ArtifactAPITransport, ProfileInvent
     }
 
     func completeArtifact(jobID: String, artifactID: String, request: ArtifactCompleteRequest) async throws -> ArtifactCompleteResponse {
-        try await base.completeArtifact(jobID: jobID, artifactID: artifactID, request: request)
+        let response = try await base.completeArtifact(jobID: jobID, artifactID: artifactID, request: request)
+        if response.completed, var job = jobs[jobID] {
+            job.resultArtifactID = response.artifactID
+            jobs[jobID] = job
+        }
+        return response
     }
 
     func syncProfileInventory(profileRef: String, request: ProfileInventoryRequest) async throws -> ProfileInventoryResponse {

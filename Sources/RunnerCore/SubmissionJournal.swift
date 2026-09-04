@@ -15,8 +15,15 @@ public struct SubmissionRecord: Equatable, Sendable {
     public let phase: SubmissionPhase
     public let remoteTaskID: String?
     public let terminalState: RunnerJobState?
+    public let runtimeVersion: String?
+    public let runtimeSHA256: String?
     public let createdAt: Date
     public let updatedAt: Date
+
+    public var runtimeIdentity: LibTVRuntimeIdentity? {
+        guard let runtimeVersion, let runtimeSHA256 else { return nil }
+        return .init(version: runtimeVersion, sha256: runtimeSHA256)
+    }
 }
 
 public enum SubmissionRecoveryAction: Equatable, Sendable {
@@ -49,12 +56,20 @@ public enum SubmissionJournalError: Error, LocalizedError, Sendable {
     case open(String)
     case sqlite(code: Int32, message: String)
     case invalidStoredValue(String)
+    case missingSubmission(String)
+    case conflictingRemoteTaskID(stored: String, requested: String)
+    case conflictingRuntime(stored: LibTVRuntimeIdentity, requested: LibTVRuntimeIdentity)
 
     public var errorDescription: String? {
         switch self {
         case .open(let message): "Unable to open Runner database: \(message)"
         case .sqlite(let code, let message): "SQLite error \(code): \(message)"
         case .invalidStoredValue(let value): "Invalid value in Runner database: \(value)"
+        case .missingSubmission(let jobID): "No local submission record exists for job \(jobID)."
+        case .conflictingRemoteTaskID(let stored, let requested):
+            "Remote task identity conflict: stored \(stored), requested \(requested)."
+        case .conflictingRuntime(let stored, let requested):
+            "LibTV Runtime identity conflict: stored \(stored.version)/\(stored.sha256), requested \(requested.version)/\(requested.sha256)."
         }
     }
 }
@@ -99,10 +114,14 @@ public actor SubmissionJournal {
                 phase TEXT NOT NULL,
                 remote_task_id TEXT,
                 terminal_state TEXT,
+                runtime_version TEXT,
+                runtime_sha256 TEXT,
                 created_at REAL NOT NULL,
                 updated_at REAL NOT NULL
             );
             """)
+        try Self.ensureColumn(database, table: "submissions", name: "runtime_version", definition: "TEXT")
+        try Self.ensureColumn(database, table: "submissions", name: "runtime_sha256", definition: "TEXT")
         try Self.execute(database, """
             CREATE TABLE IF NOT EXISTS diagnostic_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,6 +143,14 @@ public actor SubmissionJournal {
                 created_at REAL NOT NULL
             );
             """)
+        try Self.execute(database, """
+            CREATE TABLE IF NOT EXISTS job_runtime_bindings (
+                job_id TEXT PRIMARY KEY NOT NULL,
+                runtime_version TEXT NOT NULL,
+                runtime_sha256 TEXT NOT NULL,
+                selected_at REAL NOT NULL
+            );
+            """)
         _ = chmod(databaseURL.path, 0o600)
     }
 
@@ -134,12 +161,15 @@ public actor SubmissionJournal {
         jobID: String,
         profileRef: String,
         requestFingerprint: String,
+        runtime: LibTVRuntimeIdentity? = nil,
         at date: Date = .now
     ) throws -> Bool {
+        if let runtime { try bindJobRuntime(jobID: jobID, runtime: runtime, at: date) }
         let sql = """
             INSERT OR IGNORE INTO submissions
-                (job_id, profile_ref, request_fingerprint, phase, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?);
+                (job_id, profile_ref, request_fingerprint, phase, runtime_version,
+                 runtime_sha256, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """
         let statement = try prepare(sql)
         defer { sqlite3_finalize(statement) }
@@ -147,10 +177,90 @@ public actor SubmissionJournal {
         bind(profileRef, to: 2, in: statement)
         bind(requestFingerprint, to: 3, in: statement)
         bind(SubmissionPhase.intentRecorded.rawValue, to: 4, in: statement)
-        sqlite3_bind_double(statement, 5, date.timeIntervalSince1970)
-        sqlite3_bind_double(statement, 6, date.timeIntervalSince1970)
+        bindOptional(runtime?.version, to: 5, in: statement)
+        bindOptional(runtime?.sha256, to: 6, in: statement)
+        sqlite3_bind_double(statement, 7, date.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 8, date.timeIntervalSince1970)
         try stepDone(statement)
-        return sqlite3_changes(database) == 1
+        let inserted = sqlite3_changes(database) == 1
+        if !inserted, let runtime { try bindRuntime(jobID: jobID, runtime: runtime, at: date) }
+        return inserted
+    }
+
+    /// Runtime identity is write-once per job. Legacy rows without identity may be upgraded, but
+    /// an existing version/hash can never be silently changed after active Runtime switches.
+    public func bindRuntime(
+        jobID: String,
+        runtime: LibTVRuntimeIdentity,
+        at date: Date = .now
+    ) throws {
+        guard let existing = try record(for: jobID) else {
+            throw SubmissionJournalError.missingSubmission(jobID)
+        }
+        if let stored = existing.runtimeIdentity, stored != runtime {
+            throw SubmissionJournalError.conflictingRuntime(stored: stored, requested: runtime)
+        }
+        guard existing.runtimeIdentity == nil else { return }
+        let statement = try prepare("UPDATE submissions SET runtime_version = ?, runtime_sha256 = ?, updated_at = ? WHERE job_id = ?;")
+        defer { sqlite3_finalize(statement) }
+        bind(runtime.version, to: 1, in: statement)
+        bind(runtime.sha256, to: 2, in: statement)
+        sqlite3_bind_double(statement, 3, date.timeIntervalSince1970)
+        bind(jobID, to: 4, in: statement)
+        try stepDone(statement)
+    }
+
+    /// Persists Runtime selection before any preparation CLI command can run. This table is
+    /// independent from paid-submission intent, so preparing a job does not make a safe retry look
+    /// like an uncertain paid submission.
+    public func bindJobRuntime(
+        jobID: String,
+        runtime: LibTVRuntimeIdentity,
+        at date: Date = .now
+    ) throws {
+        if let stored = try runtimeIdentity(for: jobID), stored != runtime {
+            throw SubmissionJournalError.conflictingRuntime(stored: stored, requested: runtime)
+        }
+        let statement = try prepare("""
+            INSERT OR IGNORE INTO job_runtime_bindings
+                (job_id, runtime_version, runtime_sha256, selected_at)
+            VALUES (?, ?, ?, ?);
+            """)
+        defer { sqlite3_finalize(statement) }
+        bind(jobID, to: 1, in: statement)
+        bind(runtime.version, to: 2, in: statement)
+        bind(runtime.sha256, to: 3, in: statement)
+        sqlite3_bind_double(statement, 4, date.timeIntervalSince1970)
+        try stepDone(statement)
+    }
+
+    public func runtimeIdentity(for jobID: String) throws -> LibTVRuntimeIdentity? {
+        let statement = try prepare("SELECT runtime_version, runtime_sha256 FROM job_runtime_bindings WHERE job_id = ? LIMIT 1;")
+        defer { sqlite3_finalize(statement) }
+        bind(jobID, to: 1, in: statement)
+        let code = sqlite3_step(statement)
+        if code == SQLITE_ROW {
+            return .init(version: text(statement, 0) ?? "", sha256: text(statement, 1) ?? "")
+        }
+        guard code == SQLITE_DONE else { throw sqliteError(code) }
+        return try record(for: jobID)?.runtimeIdentity
+    }
+
+    public func retainedRuntimeIdentities() throws -> Set<LibTVRuntimeIdentity> {
+        let statement = try prepare("""
+            SELECT DISTINCT b.runtime_version, b.runtime_sha256
+            FROM job_runtime_bindings b
+            LEFT JOIN submissions s ON s.job_id = b.job_id
+            WHERE s.job_id IS NULL OR s.terminal_state IS NULL OR s.terminal_state = 'needs_review';
+            """)
+        defer { sqlite3_finalize(statement) }
+        var values = Set<LibTVRuntimeIdentity>()
+        while true {
+            let code = sqlite3_step(statement)
+            if code == SQLITE_DONE { return values }
+            guard code == SQLITE_ROW else { throw sqliteError(code) }
+            values.insert(.init(version: text(statement, 0) ?? "", sha256: text(statement, 1) ?? ""))
+        }
     }
 
     public func attachRemoteTask(
@@ -161,6 +271,37 @@ public actor SubmissionJournal {
         try update(
             sql: "UPDATE submissions SET remote_task_id = ?, phase = ?, updated_at = ? WHERE job_id = ?;",
             bindings: [remoteTaskID, SubmissionPhase.remoteKnown.rawValue, date.timeIntervalSince1970, jobID]
+        )
+    }
+
+    /// Reopens a terminal local record for an explicit server-authorized, query-only review.
+    /// The paid remote identity is immutable; a conflicting ID is never overwritten.
+    public func resumeRemoteQuery(
+        jobID: String,
+        profileRef: String,
+        remoteTaskID: String,
+        at date: Date = .now
+    ) throws {
+        guard let existing = try record(for: jobID) else {
+            throw SubmissionJournalError.missingSubmission(jobID)
+        }
+        if let stored = existing.remoteTaskID, stored != remoteTaskID {
+            throw SubmissionJournalError.conflictingRemoteTaskID(
+                stored: stored,
+                requested: remoteTaskID
+            )
+        }
+        try update(
+            sql: """
+                UPDATE submissions
+                SET profile_ref = ?, remote_task_id = ?, terminal_state = NULL,
+                    phase = ?, updated_at = ?
+                WHERE job_id = ?;
+                """,
+            bindings: [
+                profileRef, remoteTaskID, SubmissionPhase.remoteKnown.rawValue,
+                date.timeIntervalSince1970, jobID,
+            ]
         )
     }
 
@@ -180,7 +321,7 @@ public actor SubmissionJournal {
     public func record(for jobID: String) throws -> SubmissionRecord? {
         let statement = try prepare("""
             SELECT job_id, profile_ref, request_fingerprint, phase, remote_task_id,
-                   terminal_state, created_at, updated_at
+                   terminal_state, runtime_version, runtime_sha256, created_at, updated_at
             FROM submissions WHERE job_id = ? LIMIT 1;
             """)
         defer { sqlite3_finalize(statement) }
@@ -202,7 +343,7 @@ public actor SubmissionJournal {
     public func pendingRecoveryRecords() throws -> [SubmissionRecord] {
         let statement = try prepare("""
             SELECT job_id, profile_ref, request_fingerprint, phase, remote_task_id,
-                   terminal_state, created_at, updated_at
+                   terminal_state, runtime_version, runtime_sha256, created_at, updated_at
             FROM submissions WHERE phase IN ('intent_recorded', 'remote_known', 'needs_review')
             ORDER BY created_at ASC;
             """)
@@ -369,8 +510,10 @@ public actor SubmissionJournal {
             phase: phase,
             remoteTaskID: text(statement, 4),
             terminalState: state,
-            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 6)),
-            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 7))
+            runtimeVersion: text(statement, 6),
+            runtimeSHA256: text(statement, 7),
+            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 8)),
+            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 9))
         )
     }
 
@@ -448,6 +591,24 @@ public actor SubmissionJournal {
             sqlite3_free(errorMessage)
             throw SubmissionJournalError.sqlite(code: code, message: message)
         }
+    }
+
+    private static func ensureColumn(
+        _ database: OpaquePointer,
+        table: String,
+        name: String,
+        definition: String
+    ) throws {
+        var statement: OpaquePointer?
+        let code = sqlite3_prepare_v2(database, "PRAGMA table_info(\(table));", -1, &statement, nil)
+        guard code == SQLITE_OK else {
+            throw SubmissionJournalError.sqlite(code: code, message: String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let value = sqlite3_column_text(statement, 1), String(cString: value) == name { return }
+        }
+        try execute(database, "ALTER TABLE \(table) ADD COLUMN \(name) \(definition);")
     }
 }
 
