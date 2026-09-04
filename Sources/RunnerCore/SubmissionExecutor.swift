@@ -30,8 +30,8 @@ private actor RemoteTaskDiscovery {
 
     func consume(_ output: LibTVProcessOutput) async {
         guard failure == nil else { return }
-        let snapshot = try? LibTVOutputParser.parse(output.line)
-        if let discovered = snapshot?.taskID ?? LibTVOutputParser.remoteTaskID(in: output.line) {
+        let snapshot = try? LibTVCLIAdapter.parse(output.line)
+        if let discovered = snapshot?.taskID ?? LibTVCLIAdapter.remoteTaskID(in: output.line) {
             if let remoteTaskID {
                 if remoteTaskID != discovered {
                     failure = RemoteTaskDiscoveryError.conflictingTaskIDs(remoteTaskID, discovered)
@@ -176,7 +176,7 @@ public actor SubmissionExecutor {
             try await journal.markTerminal(jobID: jobID, state: .failed)
             return .process(result, snapshot: snapshot)
         }
-        let snapshot = try? LibTVOutputParser.parse(result.standardOutput + "\n" + result.standardError)
+        let snapshot = try? LibTVCLIAdapter.parse(result.standardOutput + "\n" + result.standardError)
         let incrementallyDiscoveredID = await discovery.discoveredID()
         let discoveredRemoteTaskID = snapshot?.taskID ?? incrementallyDiscoveredID
         if result.disposition == .exited,
@@ -255,11 +255,7 @@ public actor SubmissionExecutor {
               let group = optionValue("--group", in: arguments) else { return nil }
 
         let nodeName = arguments[2]
-        let queryArguments = [
-            "node", nodeName,
-            "--project", project,
-            "--group", group,
-        ]
+        let queryArguments = LibTVCLIAdapter.queryNode(nodeName, project: project, group: group)
         for attempt in 1...5 {
             try await Task.sleep(for: .milliseconds(400))
             let query = try await profile.execute(
@@ -307,7 +303,7 @@ public actor SubmissionExecutor {
             throw error
         }
         let combinedOutput = result.standardOutput + "\n" + result.standardError
-        let parsedSnapshot = try? LibTVOutputParser.parse(combinedOutput)
+        let parsedSnapshot = try? LibTVCLIAdapter.parse(combinedOutput)
         if let parsedTaskID = parsedSnapshot?.taskID, parsedTaskID != remoteTaskID {
             try await journal.markTerminal(jobID: jobID, state: .needsReview)
             return .process(result, snapshot: nil)

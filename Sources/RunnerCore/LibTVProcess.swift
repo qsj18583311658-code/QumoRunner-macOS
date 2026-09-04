@@ -329,6 +329,7 @@ public actor ProfileExecutor {
     public let profileRef: String
     private let runner: LibTVProcessRunner
     private var runtimeBindings: [String: URL] = [:]
+    private var verifiedContracts: [String: JSONPayloadValue] = [:]
     private var runtimeRunners: [String: LibTVProcessRunner] = [:]
     private var activeRunners: [String: LibTVProcessRunner] = [:]
     private let limiter: GlobalConcurrencyLimiter
@@ -423,6 +424,19 @@ public actor ProfileExecutor {
     }
 
     public func defaultRuntimeExecutableURL() -> URL { runner.executableURL }
+
+    /// Uses the same binding and Profile serialization as the job's preparation/submission.
+    /// Cache only successful probes of an immutable path + version + checksum in this process.
+    public func verifyCLIContract(jobID: String, runtime: LibTVRuntimeIdentity) async throws -> JSONPayloadValue {
+        let selected = await runnerForExecution(jobID: jobID)
+        let key = "\(selected.executableURL.path)|\(runtime.version)|\(runtime.sha256)|\(LibTVCLIAdapter.id)"
+        if let report = verifiedContracts[key] { return report }
+        let report = try await LibTVCLIContract.verify(runtime: runtime) { arguments in
+            try await self.execute(jobID: "\(jobID):cli-contract", arguments: arguments, timeout: .seconds(15))
+        }
+        verifiedContracts[key] = report
+        return report
+    }
 
     /// Shrinking is drain-only: existing executions keep their permits and new waiters resume
     /// only after the active count drops below the new limit.

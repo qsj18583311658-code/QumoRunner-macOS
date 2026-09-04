@@ -152,6 +152,28 @@ public actor SubmissionJournal {
             );
             """)
         _ = chmod(databaseURL.path, 0o600)
+        try Self.execute(database, """
+            CREATE TABLE IF NOT EXISTS job_cli_adapters (
+                job_id TEXT PRIMARY KEY NOT NULL,
+                adapter_id TEXT NOT NULL
+            );
+            """)
+    }
+
+    /// Legacy rows used v1. Once selected, an App upgrade must not silently reinterpret a job.
+    public func bindCLIAdapter(jobID: String, adapterID: String = LibTVCLIAdapter.id, legacy: Bool = false) throws {
+        guard adapterID == LibTVCLIAdapter.id else { throw LibTVCLIContractError.unsupportedAdapter(adapterID) }
+        let insert = try prepare("INSERT OR IGNORE INTO job_cli_adapters(job_id,adapter_id) VALUES(?,?);")
+        defer { sqlite3_finalize(insert) }
+        bind(jobID, to: 1, in: insert); bind(legacy ? "libtv-cli-v1" : adapterID, to: 2, in: insert)
+        try stepDone(insert)
+        let query = try prepare("SELECT adapter_id FROM job_cli_adapters WHERE job_id=?;")
+        defer { sqlite3_finalize(query) }
+        bind(jobID, to: 1, in: query)
+        guard sqlite3_step(query) == SQLITE_ROW, let stored = text(query, 0) else {
+            throw SubmissionJournalError.invalidStoredValue("missing CLI adapter")
+        }
+        guard stored == adapterID else { throw LibTVCLIContractError.unsupportedAdapter(stored) }
     }
 
     /// Atomically establishes idempotency before a LibTV submission can start.

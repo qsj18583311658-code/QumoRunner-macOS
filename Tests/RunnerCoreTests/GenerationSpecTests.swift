@@ -652,6 +652,52 @@ import Testing
         return try #require(JSONDecoder().decode(JSONPayloadValue.self, from: data).objectValue)
     }
 
+    @Test
+    func hiddenProjectPreparationUsesTheJobsPinnedRuntime() async throws {
+        let root = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaultBinary = root.appending(path: "default")
+        let candidate = root.appending(path: "candidate")
+        try "#!/bin/sh\necho wrong-runtime >> \"$HOME/default-called\"\nexit 1\n".write(to: defaultBinary, atomically: true, encoding: .utf8)
+        try """
+        #!/bin/sh
+        printf '%s\\n' "$*" >> "$HOME/candidate-called"
+        if [ "$1" = project ] && [ "$2" = create ]; then
+          echo '{"uuid":"pinned-project-1234567890"}'
+        else
+          echo '{}'
+        fi
+        """.write(to: candidate, atomically: true, encoding: .utf8)
+        for file in [defaultBinary, candidate] {
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+        }
+        let executor = ProfileExecutor(profileRef: "profile", runner: LibTVProcessRunner(executableURL: defaultBinary, homeURL: root), limiter: try GlobalConcurrencyLimiter(limit: 1))
+        try await executor.bindRuntime(jobID: "job", executableURL: candidate)
+        let raw: JSONPayloadValue = .object([
+            "modelName": .string("Image Model"),
+            "schema": .object(["properties": .object(["count": .array([.number(1)])])]),
+        ])
+        let hash = try CanonicalJSON.sha256(raw)
+        let registry = LibTVSchemaRegistry()
+        registry.replace(profileRef: "profile", schemas: [.init(modelRef: "image", modelName: "Image Model", schemaHash: hash, rawSchema: raw, approved: true)])
+        let spec = LibTVGenerationSpecV1(modality: .image, modelRef: "image", effectiveSchemaHash: hash, prompt: "test")
+        let job = RunnerJob(id: "job", requiredModelRef: "image", baseSchemaHash: hash, patchVersion: 1, effectiveSchemaHash: hash, payload: try payload(spec))
+        let preparer = LibTVGenerationPreparer(
+            registry: registry,
+            projectStore: LibTVExecutionProjectStore(fileURL: root.appending(path: "projects.json")),
+            stagingRoot: root.appending(path: "staging"),
+            journal: try SubmissionJournal(databaseURL: root.appending(path: "journal.sqlite"))
+        )
+        let prepared = try await preparer.prepare(job: job, profileRef: "profile", executor: executor)
+        #expect(prepared.arguments.contains("pinned-project-1234567890"))
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "default-called").path))
+        let log = try String(contentsOf: root.appending(path: "candidate-called"), encoding: .utf8)
+        #expect(log.contains("project list"))
+        #expect(log.contains("project create"))
+        #expect(log.contains("group create"))
+        #expect(!log.contains("--run"))
+    }
+
     private func validate(
         spec: LibTVGenerationSpecV1,
         rawSchema: JSONPayloadValue,

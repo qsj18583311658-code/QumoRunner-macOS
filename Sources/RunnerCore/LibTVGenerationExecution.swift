@@ -101,6 +101,7 @@ public enum LibTVParameterDiagnosticsBuilder {
             }
         var diagnostics: [String: JSONPayloadValue] = [
             "contract_version": .string("libtv-generation-spec-v1"),
+            "cli_adapter_id": .string(LibTVCLIAdapter.id),
             "status": .string(serverFingerprint == nil ? "runner_verified" : (serverFingerprint == runnerFingerprint ? "matched" : "mismatch")),
             "runner_spec_fingerprint": .string(runnerFingerprint),
             "model_ref": .string(validated.spec.modelRef),
@@ -122,153 +123,6 @@ public enum LibTVParameterDiagnosticsBuilder {
             diagnostics["fingerprints_match"] = .bool(serverFingerprint == runnerFingerprint)
         }
         return .object(diagnostics)
-    }
-}
-
-public enum LibTVNodeArgumentsError: Error, Equatable, LocalizedError, Sendable {
-    case wrongModality(expected: GenerationModality, actual: GenerationModality)
-    case invalidExecutionIdentifier(String)
-    case inputNodeCountMismatch(expected: Int, actual: Int)
-    case nonScalarSetting(String)
-
-    public var errorDescription: String? {
-        switch self {
-        case .wrongModality(let expected, let actual):
-            "Expected a \(expected.rawValue) generation but received \(actual.rawValue)."
-        case .invalidExecutionIdentifier(let value):
-            "LibTV execution identifiers must be non-empty: \(value)"
-        case .inputNodeCountMismatch(let expected, let actual):
-            "Expected \(expected) prepared input nodes but received \(actual)."
-        case .nonScalarSetting(let key):
-            "LibTV --set only accepts a validated scalar value for \(key)."
-        }
-    }
-}
-
-/// Command grammar for non-billable preparation steps. Keeping these arguments in a
-/// pure builder prevents silent drift when the LibTV CLI changes its subcommands.
-public enum LibTVPreparationArgumentsBuilder {
-    public static func createGroup(name: String, projectUUID: String) -> [String] {
-        ["group", "create", name, "--project", projectUUID]
-    }
-}
-
-/// Pure, deterministic construction of the only paid LibTV command shape accepted in
-/// production. Callers provide values that have already passed `LibTVGenerationValidator`;
-/// this builder owns the command grammar and never accepts a subcommand or arbitrary arguments.
-public enum LibTVNodeArgumentsBuilder {
-    public static func arguments(
-        for generation: ValidatedLibTVGeneration,
-        projectUUID: String,
-        groupName: String,
-        generationNodeName: String,
-        inputNodeNames: [String]
-    ) throws -> [String] {
-        switch generation.spec.modality {
-        case .image:
-            return try imageArguments(
-                for: generation,
-                projectUUID: projectUUID,
-                groupName: groupName,
-                generationNodeName: generationNodeName,
-                inputNodeNames: inputNodeNames
-            )
-        case .video:
-            return try videoArguments(
-                for: generation,
-                projectUUID: projectUUID,
-                groupName: groupName,
-                generationNodeName: generationNodeName,
-                inputNodeNames: inputNodeNames
-            )
-        }
-    }
-
-    public static func imageArguments(
-        for generation: ValidatedLibTVGeneration,
-        projectUUID: String,
-        groupName: String,
-        generationNodeName: String,
-        inputNodeNames: [String]
-    ) throws -> [String] {
-        guard generation.spec.modality == .image else {
-            throw LibTVNodeArgumentsError.wrongModality(expected: .image, actual: generation.spec.modality)
-        }
-        return try nodeArguments(
-            for: generation,
-            projectUUID: projectUUID,
-            groupName: groupName,
-            generationNodeName: generationNodeName,
-            inputNodeNames: inputNodeNames
-        )
-    }
-
-    public static func videoArguments(
-        for generation: ValidatedLibTVGeneration,
-        projectUUID: String,
-        groupName: String,
-        generationNodeName: String,
-        inputNodeNames: [String]
-    ) throws -> [String] {
-        guard generation.spec.modality == .video else {
-            throw LibTVNodeArgumentsError.wrongModality(expected: .video, actual: generation.spec.modality)
-        }
-        return try nodeArguments(
-            for: generation,
-            projectUUID: projectUUID,
-            groupName: groupName,
-            generationNodeName: generationNodeName,
-            inputNodeNames: inputNodeNames
-        )
-    }
-
-    private static func nodeArguments(
-        for generation: ValidatedLibTVGeneration,
-        projectUUID: String,
-        groupName: String,
-        generationNodeName: String,
-        inputNodeNames: [String]
-    ) throws -> [String] {
-        for value in [projectUUID, groupName, generationNodeName] where value.isEmpty {
-            throw LibTVNodeArgumentsError.invalidExecutionIdentifier(value)
-        }
-        guard inputNodeNames.count == generation.spec.inputs.count else {
-            throw LibTVNodeArgumentsError.inputNodeCountMismatch(
-                expected: generation.spec.inputs.count,
-                actual: inputNodeNames.count
-            )
-        }
-        if let empty = inputNodeNames.first(where: \.isEmpty) {
-            throw LibTVNodeArgumentsError.invalidExecutionIdentifier(empty)
-        }
-
-        var arguments = [
-            "node", "create", generationNodeName,
-            "--project", projectUUID,
-            "--group", groupName,
-            "--type", generation.spec.modality.rawValue,
-            "--set", "model=\(generation.modelName)",
-            "--set", "count=\(generation.spec.count)",
-        ]
-        if let prompt = generation.spec.prompt { arguments += ["--prompt", prompt] }
-        if let mode = generation.spec.modeType { arguments += ["--set", "modeType=\(mode)"] }
-        for (key, value) in generation.flattenedSettings.sorted(by: { $0.0 < $1.0 }) {
-            arguments += ["--set", "\(key)=\(try cliValue(value, key: key))"]
-        }
-        for inputNode in inputNodeNames { arguments += ["--left", inputNode] }
-        arguments.append("--run")
-        return arguments
-    }
-
-    private static func cliValue(_ value: JSONPayloadValue, key: String) throws -> String {
-        switch value {
-        case .string(let value): return value
-        case .number(let value):
-            return value.rounded() == value ? String(Int64(value)) : String(value)
-        case .bool(let value): return value ? "true" : "false"
-        case .null: return "null"
-        default: throw LibTVNodeArgumentsError.nonScalarSetting(key)
-        }
     }
 }
 
@@ -422,7 +276,7 @@ public actor LibTVGenerationPreparer: GenerationJobPreparing {
         executor: ProfileExecutor
     ) async throws -> PreparedLibTVSubmission {
         let validated = try LibTVGenerationValidator.validate(job: job, profileRef: profileRef, registry: registry)
-        let projectUUID = try await ensureProject(profileRef: profileRef, executor: executor)
+        let projectUUID = try await ensureProject(jobID: job.id, profileRef: profileRef, executor: executor)
         let groupName = deterministicName(prefix: "qumo-job", seed: job.id)
         let generationNode = deterministicName(prefix: "generate", seed: job.id)
         let groupResult = try await executor.execute(
@@ -450,7 +304,7 @@ public actor LibTVGenerationPreparer: GenerationJobPreparing {
             inputNodeNames.append(nodeName)
             let query = try await executor.execute(
                 jobID: "\(job.id):query-input-\(input.order)",
-                arguments: ["node", nodeName, "--project", projectUUID, "--group", groupName],
+                arguments: LibTVCLIAdapter.queryNode(nodeName, project: projectUUID, group: groupName),
                 timeout: .seconds(45)
             )
             if query.exitCode == 0 && !query.requiresManualReview { continue }
@@ -462,10 +316,7 @@ public actor LibTVGenerationPreparer: GenerationJobPreparing {
             }
             let upload = try await executor.execute(
                 jobID: "\(job.id):upload-input-\(input.order)",
-                arguments: [
-                    "upload", nodeName, "--file", destination.path,
-                    "--type", input.kind, "--project", projectUUID, "--group", groupName,
-                ],
+                arguments: LibTVCLIAdapter.upload(nodeName, file: destination.path, kind: input.kind, project: projectUUID, group: groupName),
                 timeout: .seconds(10 * 60)
             )
             try requireSuccess(upload)
@@ -495,12 +346,12 @@ public actor LibTVGenerationPreparer: GenerationJobPreparing {
         )
     }
 
-    private func ensureProject(profileRef: String, executor: ProfileExecutor) async throws -> String {
+    private func ensureProject(jobID: String, profileRef: String, executor: ProfileExecutor) async throws -> String {
         if let existing = await projectStore.projectUUID(profileRef: profileRef) { return existing }
         let projectName = "Qumo Runner Hidden · \(profileToken(profileRef))"
         let list = try await executor.execute(
-            jobID: "project-list:\(profileToken(profileRef))",
-            arguments: ["project", "list", "--name", projectName, "--page-size", "20"],
+            jobID: "\(jobID):project-list",
+            arguments: LibTVCLIAdapter.listProjects(name: projectName),
             timeout: .seconds(90)
         )
         try requireSuccess(list)
@@ -512,8 +363,8 @@ public actor LibTVGenerationPreparer: GenerationJobPreparing {
             return existing
         }
         let result = try await executor.execute(
-            jobID: "project:\(profileToken(profileRef))",
-            arguments: ["project", "create", projectName],
+            jobID: "\(jobID):project-create",
+            arguments: LibTVCLIAdapter.createProject(name: projectName),
             timeout: .seconds(90)
         )
         try requireSuccess(result)
@@ -584,11 +435,7 @@ public actor LibTVExecutionCleaner {
             for node in children {
                 let result = try await executor.execute(
                     jobID: "\(layout.jobID):cleanup",
-                    arguments: [
-                        "node", "delete", node,
-                        "--project", layout.projectUUID,
-                        "--group", layout.groupName,
-                    ],
+                    arguments: LibTVCLIAdapter.deleteNode(node, project: layout.projectUUID, group: layout.groupName),
                     timeout: .seconds(90)
                 )
                 if result.requiresManualReview || result.exitCode != 0 { successful = false; break }

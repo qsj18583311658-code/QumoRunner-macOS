@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		ABC2026090400000000000001 /* LibTVCLIAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC2026090400000000000002 /* LibTVCLIAdapter.swift */; };
 		01559A05497EA6CF0FC9761A /* AccountInsightParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 546E4982D13ACFC1514AEC10 /* AccountInsightParserTests.swift */; };
 		0161160F3067518505083586 /* QumoRunnerAgentMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009892DC579B3109CEEAA4B3 /* QumoRunnerAgentMain.swift */; };
 		026A6D9C2DDD9E6A1DE79B03 /* DiagnosticExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E795BA97A6C60318C01E302 /* DiagnosticExporter.swift */; };
@@ -137,6 +138,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		ABC2026090400000000000002 /* LibTVCLIAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibTVCLIAdapter.swift; sourceTree = "<group>"; };
 		009892DC579B3109CEEAA4B3 /* QumoRunnerAgentMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QumoRunnerAgentMain.swift; sourceTree = "<group>"; };
 		019437D38D4DC8680900CAC1 /* QumoRunnerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QumoRunnerApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0832583503CDD49D35216046 /* QumoRunnerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QumoRunnerApp.swift; sourceTree = "<group>"; };
@@ -397,6 +399,7 @@
 				DAA9A7DB4D5E2C6F48BFDF39 /* GenerationSpec.swift */,
 				AB4F52D47B5E28AFFD0F34EB /* LibTVBinaryVerifier.swift */,
 				BA250F1E57420A25ECA8A22B /* LibTVGenerationExecution.swift */,
+				ABC2026090400000000000002 /* LibTVCLIAdapter.swift */,
 				E3C51D17E9BB57288FBC0960 /* LibTVOutputParser.swift */,
 				BAF9769139C6866AC09C7E34 /* LibTVProcess.swift */,
 				6CF785DBA807D201E72FA723 /* LibTVRuntime.swift */,
@@ -766,6 +769,7 @@
 				67B1E2DBC31BD74EBCEFA990 /* GenerationSpec.swift in Sources */,
 				F70C4E5350A69521A3945477 /* LibTVBinaryVerifier.swift in Sources */,
 				D658BEDBB75420DBFD53B900 /* LibTVGenerationExecution.swift in Sources */,
+				ABC2026090400000000000001 /* LibTVCLIAdapter.swift in Sources */,
 				AE0B6D767B93CE135BF94B42 /* LibTVOutputParser.swift in Sources */,
 				E7DB5F3EB3F86339D49D95A5 /* LibTVProcess.swift in Sources */,
 				FABC7C91946731EB7281E95E /* LibTVRuntime.swift in Sources */,

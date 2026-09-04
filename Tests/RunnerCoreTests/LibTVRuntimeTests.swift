@@ -38,7 +38,12 @@ import Testing
         #expect(staged.candidate == candidateIdentity)
         #expect(staged.protocolVersion == "1")
 
-        _ = try await registry.activateCandidate()
+        await #expect(throws: LibTVRuntimeRegistryError.self) {
+            try await registry.activateCandidate(expected: fallback.identity)
+        }
+        #expect(try await registry.snapshot().active == fallback.identity)
+        #expect(try await registry.snapshot().candidate == candidateIdentity)
+        _ = try await registry.activateCandidate(expected: candidateIdentity)
         let active = try await registry.snapshot()
         #expect(active.active == candidateIdentity)
         #expect(active.previous == fallback.identity)
@@ -48,7 +53,11 @@ import Testing
         let reopened = LibTVRuntimeRegistry(rootURL: runtimes, bundledFallback: fallback)
         try await reopened.bootstrap()
         #expect(try await reopened.activeRuntime().identity == candidateIdentity)
-        #expect(try await reopened.rollback().identity == fallback.identity)
+        await #expect(throws: LibTVRuntimeRegistryError.self) {
+            try await reopened.rollback(expected: candidateIdentity)
+        }
+        #expect(try await reopened.activeRuntime().identity == candidateIdentity)
+        #expect(try await reopened.rollback(expected: fallback.identity).identity == fallback.identity)
         #expect(try await reopened.snapshot().previous == candidateIdentity)
     }
 

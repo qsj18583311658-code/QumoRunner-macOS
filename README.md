@@ -111,3 +111,26 @@ xcodebuild -project QumoRunner.xcodeproj \
 ```
 
 当前代码已通过 Xcode 16.4、macOS 15.5 SDK、Swift 6 严格并发的完整 Debug 构建；RunnerCore 48 项测试以及 Agent/App 30 项测试全部通过。当前 Mac 已完成可信开发签名安装、`SMAppService` 拉起、旧 Profile 账号标识迁移和真实 Liblib 套餐/积分手动刷新验证；多账号并行与 72 小时故障验收仍需在专用 Mac mini 持续执行。
+
+## CLI 兼容与升级
+
+业务任务继续使用 `LibTVGenerationSpecV1`。模型参数由审批过的原始 Schema 映射；CLI 命令语法及输出解析入口集中在 `Sources/RunnerCore/LibTVCLIAdapter.swift`，当前契约为 `libtv-cli-v1`。
+
+拿到新版本后，先对已下载、可信的可执行文件运行只读检查：
+
+```bash
+swift run --package-path apps/canvas-runner-macos libtv-contract-check /absolute/path/to/libtv
+```
+
+以上命令从仓库根目录运行，只调用 `--version` 和各命令的 `--help`，使用临时 HOME，输出版本、SHA-256、适配器 ID 和标准化命令指纹。它不改变本机版本，不登录或生成媒体，也不代替官方签名验证。语法不匹配时返回失败。回归样本 `Tests/RunnerCoreTests/Resources/cli-contract-*.json` 采集自实际的 1.0.2 和 1.1.3 二进制，包含对应 SHA-256；不代表这些版本都已获生产批准。
+
+升级顺序：
+
+1. 管理后台发现官方版本，使用隔离账号验证。下载器先验证签名/校验和，再验证 CLI 语法；失败时保留当前版本。
+2. 执行原有图片/视频队列验收，检查真实参数、结果解析、远端 ID 和产物；审核 Schema 差异。帮助文本只证明命令形状，不能证明参数和服务端行为保持不变。
+3. 管理员批准，等待任务清空后激活。目标 Runner 再次验证本地适配器与命令契约；启动失败时使用已验证兜底。回滚前也检查目标二进制。
+4. 任务记录 Runtime 版本/校验和及适配器 ID。准备隐藏画布、提交和恢复查询均使用该绑定。旧任务缺失所需适配器时进入复核，不换版本重提。
+
+兼容的 CLI 升级可沿用 v1 适配器，无需仅为版本号重新发布 App。模型字段变化走现有 Schema 同步/审批；命令或输出含义发生不兼容变化时，新增适配器版本、帮助/输出回归样本并发布 Runner，再重新执行隔离验收。不要原地改变 v1 的含义，旧任务仍可能需要它。当前只实现 v1，未知适配器会拒绝执行；未来增加版本时需同时补充选择和旧任务分派。
+
+升级本功能前产生的通过/批准记录缺少 `cli_contract` 时，后台会要求重新验证，且不能再用于批准或激活。先更新 Runner，再从该版本卡片的“隔离验证”入口补齐证据；当前已运行任务保持自己的版本绑定。

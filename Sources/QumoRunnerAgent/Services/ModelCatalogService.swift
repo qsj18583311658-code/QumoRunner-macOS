@@ -141,7 +141,7 @@ struct ModelCatalogService: Sendable {
     func fetch(using runner: LibTVProcessRunner, existing: [StoredCatalogItem], forceSchemaRefresh: Bool = false) async throws -> [CatalogCandidate] {
         var grouped: [String: [CatalogSearchItem]] = [:]
         for modality in Self.modalities {
-            let result = try await runner.run(arguments: ["model", "search", "--type", modality], timeout: .seconds(90))
+            let result = try await runner.run(arguments: LibTVCLIAdapter.searchModels(modality: modality), timeout: .seconds(90))
             guard result.exitCode == 0, !result.requiresManualReview else {
                 throw CatalogError.commandFailed(modality, result.standardError)
             }
@@ -158,7 +158,7 @@ struct ModelCatalogService: Sendable {
             let schemaHash: String
             let rawSchema: JSONPayloadValue?
             if ModelCatalogParser.needsSchemaFetch(modelRef: key, summaryHash: summaryHash, existing: existing, force: forceSchemaRefresh) {
-                let schema = try await runner.run(arguments: ["model", key], timeout: .seconds(90))
+                let schema = try await runner.run(arguments: LibTVCLIAdapter.modelSchema(key), timeout: .seconds(90))
                 guard schema.exitCode == 0, !schema.requiresManualReview else {
                     throw CatalogError.schemaFailed(key, schema.standardError)
                 }

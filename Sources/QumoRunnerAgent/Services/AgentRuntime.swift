@@ -190,7 +190,12 @@ actor AgentRuntime {
         case "activate_runtime_candidate":
             guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
             guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
-            let record = try await runtimeRegistry.activateCandidate()
+            guard let candidate = try await runtimeRegistry.snapshot().candidateRecord else {
+                throw LibTVRuntimeRegistryError.candidateUnavailable
+            }
+            _ = try await verifyRuntimeContract(candidate)
+            guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+            let record = try await runtimeRegistry.activateCandidate(expected: candidate.identity)
             do { libTVVerification = try Self.verifyRuntime(record) }
             catch { _ = try? await runtimeRegistry.rollback(); throw error }
             profileRunners = [:]; registeredProfileSignature = ""
@@ -576,6 +581,9 @@ actor AgentRuntime {
         let paths = try profileRegistry.prepare(profileRef: profileRef).1
         let candidateRunner = LibTVProcessRunner(executableURL: record.executableURL, homeURL: paths.home)
 
+        let cliContract = try await LibTVCLIContract.verify(runtime: record.identity) { arguments in
+            try await candidateRunner.run(arguments: arguments, timeout: .seconds(15))
+        }
         let account = try await candidateRunner.run(arguments: ["account", "info"], timeout: .seconds(90))
         guard account.exitCode == 0, !account.requiresManualReview else {
             throw AgentRuntimeError.libTVMetadata("候选 Runtime 无法读取隔离账号：\(account.standardError)")
@@ -598,6 +606,7 @@ actor AgentRuntime {
             stagingRoot: runtimeRegistry.stagingURL
         )
         let testReport: [String: JSONPayloadValue] = [
+            "cli_contract": cliContract,
             "checks": .object([
                 "version": .bool(true),
                 "login": .bool(true),
@@ -678,7 +687,16 @@ actor AgentRuntime {
             || (requestedHash != nil && snapshot.candidate?.sha256 != requestedHash) {
             _ = try await installRuntimeCandidate(command)
         }
-        let activated = try await runtimeRegistry.activateCandidate()
+        guard let candidate = try await runtimeRegistry.snapshot().candidateRecord else {
+            throw LibTVRuntimeRegistryError.candidateUnavailable
+        }
+        let contract = try await verifyRuntimeContract(candidate)
+        if let expectedAdapter = command.payload["cli_adapter_id"]?.stringValue,
+           contract.objectValue?["adapter_id"]?.stringValue != expectedAdapter {
+            throw LibTVCLIContractError.unsupportedAdapter(expectedAdapter)
+        }
+        guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+        let activated = try await runtimeRegistry.activateCandidate(expected: candidate.identity)
         do {
             libTVVerification = try Self.verifyRuntime(activated)
         } catch {
@@ -693,7 +711,12 @@ actor AgentRuntime {
 
     private func rollbackRuntime() async throws -> LibTVRuntimeRecord {
         guard let runtimeRegistry else { throw AgentRuntimeError.libTVUnverified("Runtime Registry 未就绪") }
-        let rolledBack = try await runtimeRegistry.rollback()
+        guard let previous = try await runtimeRegistry.snapshot().previousRecord else {
+            throw LibTVRuntimeRegistryError.previousUnavailable
+        }
+        _ = try await verifyRuntimeContract(previous)
+        guard (await engine?.snapshot().activeJobs.isEmpty) != false else { throw AgentRuntimeError.profileBusy }
+        let rolledBack = try await runtimeRegistry.rollback(expected: previous.identity)
         do {
             libTVVerification = try Self.verifyRuntime(rolledBack)
             return rolledBack
@@ -816,9 +839,11 @@ actor AgentRuntime {
             var active = try await runtimeRegistry.activeRuntime()
             do {
                 libTVVerification = try Self.verifyRuntime(active)
+                _ = try await verifyRuntimeContract(active)
             } catch {
                 active = try await runtimeRegistry.recoverToBundledFallback()
                 libTVVerification = try Self.verifyRuntime(active)
+                _ = try await verifyRuntimeContract(active)
                 appendLog(.warning, "active Runtime 校验失败，已原子回退到 App 内置 1.0.2：\(error.localizedDescription)")
             }
             libTVVerificationError = nil
@@ -829,6 +854,18 @@ actor AgentRuntime {
             libTVVerificationError = error.localizedDescription
             state = .degraded
             appendLog(.error, "LibTV 完整性校验失败：\(error.localizedDescription)")
+        }
+    }
+
+    private func verifyRuntimeContract(_ record: LibTVRuntimeRecord) async throws -> JSONPayloadValue {
+        _ = try Self.verifyRuntime(record)
+        let home = FileManager.default.temporaryDirectory.appending(path: "QumoCLIContract-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: home) }
+        let runner = LibTVProcessRunner(executableURL: record.executableURL, homeURL: home)
+        return try await LibTVCLIContract.verify(runtime: record.identity) { arguments in
+            try await runner.run(arguments: arguments, timeout: .seconds(15))
         }
     }
 

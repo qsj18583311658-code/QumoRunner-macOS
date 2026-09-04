@@ -446,6 +446,8 @@ public actor RunnerEngine {
                     executableURL: selectedRuntime.executableURL
                 )
                 activeJobs[job.id]?.runtime = selectedRuntime.identity
+                try await journal.bindCLIAdapter(jobID: job.id, legacy: persistedRuntime != nil || job.remoteTaskID != nil)
+                _ = try await registered.executor.verifyCLIContract(jobID: job.id, runtime: selectedRuntime.identity)
             }
             let outcome: SubmissionExecutionOutcome
             if let remoteTaskID = job.remoteTaskID {
@@ -805,11 +807,7 @@ public actor RunnerEngine {
     /// an explicit query builder, but production never fabricates an unsupported task command.
     private func queryArguments(remoteTaskID: String, for job: RunnerJob) async throws -> [String] {
         if let layout = try await journal.executionLayout(jobID: job.id) {
-            return [
-                "node", layout.generationNodeName,
-                "--project", layout.projectUUID,
-                "--group", layout.groupName,
-            ]
+            return LibTVCLIAdapter.queryNode(layout.generationNodeName, project: layout.projectUUID, group: layout.groupName)
         }
         return try commandBuilder.queryArguments(remoteTaskID: remoteTaskID, for: job)
     }

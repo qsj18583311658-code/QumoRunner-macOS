@@ -7,8 +7,10 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "RunnerCore", targets: ["RunnerCore"]),
+        .executable(name: "libtv-contract-check", targets: ["LibTVContractCheck"]),
     ],
     targets: [
+        .executableTarget(name: "LibTVContractCheck", dependencies: ["RunnerCore"]),
         .target(
             name: "RunnerCore",
             linkerSettings: [

@@ -229,9 +229,12 @@ public actor LibTVRuntimeRegistry: LibTVRuntimeProviding {
         try transaction { try upsertRecord(record); try setSlot("candidate", record.identity) }
     }
 
-    @discardableResult public func activateCandidate() throws -> LibTVRuntimeRecord {
+    @discardableResult public func activateCandidate(expected: LibTVRuntimeIdentity? = nil) throws -> LibTVRuntimeRecord {
         let selected: LibTVRuntimeIdentity = try transaction {
             guard let candidate = try identity(in: "candidate") else { throw LibTVRuntimeRegistryError.candidateUnavailable }
+            if let expected, candidate != expected {
+                throw LibTVRuntimeRegistryError.invalidRegistry("candidate changed during compatibility verification")
+            }
             _ = try requiredRecord(candidate)
             let active = try requiredIdentity(in: "active")
             if active != candidate { try setSlot("previous", active) }
@@ -241,9 +244,12 @@ public actor LibTVRuntimeRegistry: LibTVRuntimeProviding {
         return try requiredRecord(selected)
     }
 
-    @discardableResult public func rollback() throws -> LibTVRuntimeRecord {
+    @discardableResult public func rollback(expected: LibTVRuntimeIdentity? = nil) throws -> LibTVRuntimeRecord {
         let selected: LibTVRuntimeIdentity = try transaction {
             guard let previous = try identity(in: "previous") else { throw LibTVRuntimeRegistryError.previousUnavailable }
+            if let expected, previous != expected {
+                throw LibTVRuntimeRegistryError.invalidRegistry("previous Runtime changed during compatibility verification")
+            }
             _ = try requiredRecord(previous)
             let active = try requiredIdentity(in: "active")
             try setSlot("active", previous); try setSlot("previous", active); try clearSlot("candidate")

@@ -145,6 +145,13 @@ public struct LibTVRuntimeInstaller: Sendable {
             cdHash: verification.cdHash,
             strictSignatureValid: verification.strictSignatureValid
         )
+        let probeHome = operationURL.appending(path: "contract-home", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: probeHome, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        let probeRunner = LibTVProcessRunner(executableURL: installed, homeURL: probeHome)
+        _ = try await LibTVCLIContract.verify(runtime: identity) { arguments in
+            try await probeRunner.run(arguments: arguments, timeout: .seconds(15))
+        }
         try await registry.stageCandidate(record)
         return record
     }
