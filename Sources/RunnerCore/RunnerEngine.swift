@@ -125,6 +125,7 @@ public actor RunnerEngine {
     private var stoppedJobs = Set<String>()
     private var globalMaxConcurrency: Int
     private var paused = false
+    private var runtimeMaintenance = false
     private var tickInProgress = false
 
     public init<API: RunnerAPITransport & ArtifactAPITransport>(
@@ -224,6 +225,10 @@ public actor RunnerEngine {
         })
     }
 
+    public func beginRuntimeMaintenance() { runtimeMaintenance = true }
+    public func endRuntimeMaintenance() { runtimeMaintenance = false }
+    public func runtimeSwitchReady() -> Bool { runtimeMaintenance && !tickInProgress && activeJobs.isEmpty }
+
     public func pause() { paused = true }
     public func resume() { paused = false }
 
@@ -301,12 +306,12 @@ public actor RunnerEngine {
         // The server may queue canary jobs in the same transaction as runtime_validate. The Agent
         // stages/activates after this scheduler call, so claiming must wait until the next tick.
         guard !runtimeCommandBarrier else { return }
-        guard !paused else { return }
+        guard !paused && !runtimeMaintenance else { return }
 
         for registration in enabled {
             var attempts = 0
             while attempts < 8 {
-                guard !paused, let current = profiles[registration.profileRef]?.metadata,
+                guard !paused && !runtimeMaintenance, let current = profiles[registration.profileRef]?.metadata,
                       current.enabled, current.healthy else { break }
                 guard activeJobs.count < globalMaxConcurrency else { break }
                 let activeBeforeClaim = activeJobCount(profileRef: registration.profileRef)
@@ -327,7 +332,7 @@ public actor RunnerEngine {
                 let effective = latest.map {
                     $0.enabled && $0.healthy ? $0.maxConcurrency : 0
                 } ?? 0
-                if paused || activeJobs.count >= globalMaxConcurrency ||
+                if paused || runtimeMaintenance || activeJobs.count >= globalMaxConcurrency ||
                     activeJobCount(profileRef: registration.profileRef) >= effective {
                     _ = try await api.cancelLeasedJob(
                         jobID: job.id,
@@ -384,7 +389,7 @@ public actor RunnerEngine {
     }
 
     private var serviceState: RunnerServiceState {
-        if paused { return .paused }
+        if paused || runtimeMaintenance { return .paused }
         return activeJobs.isEmpty ? .idle : .busy
     }
 

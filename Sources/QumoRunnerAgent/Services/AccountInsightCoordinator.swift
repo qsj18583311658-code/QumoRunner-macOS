@@ -25,7 +25,12 @@ actor AccountInsightCoordinator {
     }
 
     func register(profile: RunnerProfile, runner: LibTVProcessRunner) {
+        let previous = contexts[profile.profileRef]?.runner.executableURL
         contexts[profile.profileRef] = Context(accountRef: profile.accountRef, runner: runner)
+        if let previous, previous != runner.executableURL {
+            lastFullSchemaRefresh.removeValue(forKey: profile.profileRef)
+            scheduleCatalog(profileRef: profile.profileRef)
+        }
     }
 
     func remove(profileRef: String) async {
@@ -305,8 +310,13 @@ actor AccountInsightCoordinator {
     }
 
     private func performCatalogRefresh(profileRef: String) async {
-        defer { catalogFlights.remove(profileRef) }
-        guard let context = contexts[profileRef] else { return }
+        guard let context = contexts[profileRef] else { catalogFlights.remove(profileRef); return }
+        defer {
+            catalogFlights.remove(profileRef)
+            if let current = contexts[profileRef], current.runner.executableURL != context.runner.executableURL {
+                scheduleCatalog(profileRef: profileRef)
+            }
+        }
         do {
             let current = await store.profile(profileRef)
             let forceSchemaRefresh = lastFullSchemaRefresh[profileRef].map { Date().timeIntervalSince($0) >= 24 * 60 * 60 } ?? true
@@ -315,6 +325,7 @@ actor AccountInsightCoordinator {
                 existing: current.catalog,
                 forceSchemaRefresh: forceSchemaRefresh
             )
+            guard contexts[profileRef]?.runner.executableURL == context.runner.executableURL else { return }
             try await store.reconcileCatalog(profileRef: profileRef, incoming: incoming)
             if forceSchemaRefresh { lastFullSchemaRefresh[profileRef] = .now }
         } catch {

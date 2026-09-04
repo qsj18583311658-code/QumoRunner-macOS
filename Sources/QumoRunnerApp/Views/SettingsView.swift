@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import RunnerCore
 
 struct SettingsView: View {
     @EnvironmentObject private var store: RunnerAppStore
@@ -61,14 +62,15 @@ struct SettingsView: View {
                             Button("在 Finder 中显示", action: revealDataDirectory)
                         }
                     }
-                    Toggle("离线、登录/积分异常、模型审批与待人工确认时通知", isOn: $store.notificationsEnabled)
+                    Toggle("CLI 更新、离线、登录/积分异常与待确认时通知", isOn: $store.notificationsEnabled)
                         .onChange(of: store.notificationsEnabled) { _, enabled in
                             if enabled { Task { _ = await RunnerNotificationService.shared.requestAuthorization() } }
                         }
                 }
 
                 Section("LibTV 与诊断") {
-                    LabeledContent("内嵌版本", value: store.snapshot.libTVVersion ?? "未检测")
+                    LabeledContent("当前使用版本", value: store.snapshot.libTVVersion ?? "未检测")
+                    CLIUpdateView()
                     LabeledContent("完整性", value: store.snapshot.libTVVerified ? "版本、SHA-256、代码签名已通过" : "未通过或尚未校验")
                     HStack {
                         Button("运行 LibTV 诊断") { Task { await store.runLibTVDiagnostic() } }
@@ -121,5 +123,69 @@ struct SettingsView: View {
             store.operationMessage = "本地设备 Token 已移除。请同时在 Canvas 管理端撤销此 Runner。"
             Task { _ = try? await RunnerAgentClient.shared.command("reload_pairing") }
         } catch { store.operationMessage = error.localizedDescription }
+    }
+}
+
+struct CLIUpdateView: View {
+    @EnvironmentObject private var store: RunnerAppStore
+    @State private var specifiedVersion = ""
+    var compact = false
+    private var update: LibTVUpdateStatus? { store.snapshot.libTVUpdate }
+    private var available: String? { update?.availableVersion(current: store.snapshot.libTVVersion) }
+    private var busy: Bool { update?.isBusy == true || store.isPerformingOperation }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let available {
+                Label("LibTV CLI 可更新：\(store.snapshot.libTVVersion ?? "未知") → \(available)", systemImage: "arrow.down.circle")
+                    .foregroundStyle(.orange)
+                Text("旧 CLI 可能无法适配 LibTV 服务端变化，请及时更新。")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if !compact {
+                Text("官方更新通道：\(update?.channelVersion ?? "尚未检查")")
+                HStack {
+                    Link("LibTV 官网", destination: LibTVUpdateClient.websiteURL)
+                    Text("官网版本：\(update?.websiteVersion ?? "未公开") · 下载清单：\(update?.manifestVersion ?? "未检查")")
+                }.font(.caption)
+                Text(update?.sourceNote ?? "从 LibTV 官网和官方安装清单检查更新。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let message = update?.message {
+                HStack {
+                    if update?.isBusy == true { ProgressView().controlSize(.small) }
+                    Text(message).font(.callout).textSelection(.enabled)
+                        .foregroundStyle(update?.phase == "failed" ? Color.red : Color.secondary)
+                }
+            }
+            if let error = update?.checkError { Text(error).font(.caption).foregroundStyle(.orange) }
+            HStack {
+                Button("检查 CLI 更新") { Task { await store.checkCLIUpdate() } }.disabled(busy)
+                if let available {
+                    Button("更新到 \(available)") { Task { await store.updateCLI(version: available) } }
+                        .buttonStyle(.borderedProminent).disabled(busy)
+                }
+                if !compact, let previous = update?.previousVersion {
+                    Button("回滚到 \(previous)") { Task { await store.rollbackCLI() } }.disabled(busy)
+                }
+            }
+            if !compact {
+                if let checked = update?.checkedAt {
+                    Text("上次成功检查：\(checked.formatted(date: .abbreviated, time: .shortened)) · 每 6 小时自动检查")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                DisclosureGroup("指定官方版本更新") {
+                    Text("官方清单滞后时，可填写已发布版本号。Runner 仅从官方站点下载，并验证签名和命令兼容性。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        TextField("版本号，例如 1.1.3", text: $specifiedVersion).frame(maxWidth: 220)
+                        Button("下载并更新") {
+                            Task { await store.updateCLI(version: specifiedVersion.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                        }.disabled(busy || specifiedVersion.isEmpty)
+                    }
+                }
+                Text("更新时暂停领取，等待已有任务完成后切换；失败保留原版，可回滚。若新版修改了命令格式，将提示需要更新 Runner。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }

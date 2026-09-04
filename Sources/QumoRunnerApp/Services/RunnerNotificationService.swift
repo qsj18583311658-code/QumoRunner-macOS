@@ -20,6 +20,14 @@ final class RunnerNotificationService: @unchecked Sendable {
 
     func evaluate(previous: RunnerSnapshot, current: RunnerSnapshot, enabled: Bool) {
         guard enabled else { return }
+        if let version = current.libTVUpdate?.availableVersion(current: current.libTVVersion),
+           UserDefaults.standard.string(forKey: "runner.cli.lastNotifiedVersion") != version {
+            notify(title: "LibTV CLI 有可用更新", body: "当前 \(current.libTVVersion ?? "未知")，官方更新通道 \(version)。请在 Runner 总览或设置中更新。", identifier: "cli-update-\(version)")
+            UserDefaults.standard.set(version, forKey: "runner.cli.lastNotifiedVersion")
+        }
+        if current.libTVUpdate?.phase == "failed", previous.libTVUpdate != current.libTVUpdate {
+            notify(title: "LibTV CLI 更新失败", body: current.libTVUpdate?.message ?? "请打开 Runner 查看详情。", identifier: "cli-update-failed")
+        }
         if previous.serviceState != .offline, current.serviceState == .offline {
             notify(title: "Qumo Runner 已离线", body: "无法连接 Canvas API，请检查网络或服务器。", identifier: "runner-offline")
         }

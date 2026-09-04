@@ -79,6 +79,12 @@ final class RunnerAppStore: ObservableObject {
         }
     }
 
+    func checkCLIUpdate() async { await execute(command: "check_cli_update") }
+    func updateCLI(version: String? = nil) async {
+        await execute(command: "update_cli", payload: version.map { ["version": $0] } ?? [:])
+    }
+    func rollbackCLI() async { await execute(command: "rollback_cli") }
+
     func setPaused(_ paused: Bool) async {
         await execute(command: paused ? "pause_claiming" : "resume_claiming")
     }

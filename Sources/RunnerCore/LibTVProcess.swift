@@ -117,7 +117,7 @@ private final class TerminationAwaiter: @unchecked Sendable {
 }
 
 public actor LibTVProcessRunner {
-    public let executableURL: URL
+    public nonisolated let executableURL: URL
     public let homeURL: URL
     public let defaultTimeout: Duration
 

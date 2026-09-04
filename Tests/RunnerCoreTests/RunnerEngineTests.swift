@@ -854,7 +854,10 @@ import Testing
         )
         try await engine.tick()
         _ = try await engine.cancelBeforeSubmission(jobID: "leased-2")
-        try await Task.sleep(for: .milliseconds(30))
+        for _ in 0..<100 {
+            if await engine.snapshot().activeJobs["leased-2"] == nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let snapshot = await engine.snapshot()
         #expect(snapshot.activeJobs["leased-1"] == "p1")
         #expect(snapshot.activeJobs["leased-2"] == nil)
@@ -981,6 +984,68 @@ import Testing
         #expect(await api.cancelledJobIDs() == ["in-flight"])
         #expect(await api.recordedEvents().isEmpty)
         #expect(try await journal.recoveryAction(for: "in-flight") == .submitNew)
+    }
+
+    @Test
+    func testMaintenanceDuringInFlightClaimPreventsSwitchAndSubmission() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let api = FakeRunnerAPI(
+            jobs: [RunnerJob(
+                id: "in-flight",
+                state: .leased,
+                capability: "image",
+                payload: ["arguments": .array([.string("crash")])]
+            )],
+            claimDelay: .milliseconds(100)
+        )
+        let journal = try SubmissionJournal(databaseURL: directory.appendingPathComponent("runner.sqlite"))
+        let engine = RunnerEngine(api: api, journal: journal, commandBuilder: PayloadArgumentsCommandBuilder(), hostname: "test", version: "1")
+        await engine.register(
+            profile: RunnerProfile(
+                profileRef: "p1", accountRef: "a", displayName: "A",
+                capabilities: ["image"], maxConcurrency: 2
+            ),
+            executor: ProfileExecutor(
+                profileRef: "p1",
+                runner: LibTVProcessRunner(executableURL: executable, homeURL: directory),
+                limiter: try GlobalConcurrencyLimiter(limit: 2)
+            )
+        )
+        let tick = Task { try await engine.tick() }
+        try await Task.sleep(for: .milliseconds(20))
+        await engine.beginRuntimeMaintenance()
+        #expect(!(await engine.runtimeSwitchReady()))
+        try await tick.value
+        #expect(await engine.runtimeSwitchReady())
+        #expect(await engine.snapshot().activeJobs.isEmpty)
+        #expect(await api.cancelledJobIDs() == ["in-flight"])
+        #expect(await api.recordedEvents().isEmpty)
+        #expect(try await journal.recoveryAction(for: "in-flight") == .submitNew)
+    }
+
+    @Test func maintenanceBlocksResumeAndKeepsHeartbeats() async throws {
+        let directory = try TestSupport.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = try TestSupport.fakeLibTV()
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let api = FakeRunnerAPI(job: nil, heartbeatCommands: [[RunnerControlCommand(id: "resume", kind: .resume)]])
+        let engine = RunnerEngine(api: api, journal: try SubmissionJournal(databaseURL: directory.appendingPathComponent("journal.sqlite")), hostname: "test", version: "1")
+        await engine.register(profile: RunnerProfile(profileRef: "p1", accountRef: "a", displayName: "A", capabilities: ["image"]), executor: ProfileExecutor(profileRef: "p1", runner: LibTVProcessRunner(executableURL: executable, homeURL: directory), limiter: try GlobalConcurrencyLimiter(limit: 1)))
+        await engine.beginRuntimeMaintenance()
+        try await engine.tick()
+        #expect(await engine.runtimeSwitchReady())
+        #expect(await api.claimCount() == 0)
+        #expect(await engine.snapshot().state == .paused)
+        await engine.endRuntimeMaintenance()
+        try await engine.tick()
+        #expect(await api.claimCount() == 1)
+        await engine.pause()
+        await engine.beginRuntimeMaintenance()
+        await engine.endRuntimeMaintenance()
+        #expect(await engine.snapshot().paused)
     }
 
     private func waitForEvent(_ api: FakeRunnerAPI) async throws {

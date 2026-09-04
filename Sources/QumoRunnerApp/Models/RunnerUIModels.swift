@@ -1,4 +1,5 @@
 import Foundation
+import RunnerCore
 import SwiftUI
 
 enum ServiceState: String, Codable, CaseIterable {
@@ -395,6 +396,7 @@ struct RunnerSnapshot: Codable {
     var serverReachable: Bool
     var serverURL: String?
     var libTVVersion: String?
+    var libTVUpdate: LibTVUpdateStatus? = nil
     var libTVVerified: Bool
     var activeConcurrency: Int
     var concurrencyLimit: Int

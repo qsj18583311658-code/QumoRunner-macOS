@@ -21,6 +21,11 @@ struct OverviewView: View {
                     Spacer()
                     StateBadge(title: store.snapshot.serviceState.title, color: store.snapshot.serviceState.color)
                 }
+                if store.snapshot.libTVUpdate?.availableVersion(current: store.snapshot.libTVVersion) != nil
+                    || store.snapshot.libTVUpdate?.isBusy == true
+                    || store.snapshot.libTVUpdate?.phase == "failed" {
+                    CLIUpdateView(compact: true).padding().background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
                     MetricCard(title: "服务器", value: store.snapshot.serverReachable ? "已连接" : "未连接", detail: store.snapshot.serverURL ?? "尚未配对", icon: "network", tint: store.snapshot.serverReachable ? .green : .orange)
                     MetricCard(title: "LibTV CLI", value: store.snapshot.libTVVersion ?? "未检测", detail: store.snapshot.libTVVerified ? "版本、签名与 SHA-256 已验证" : "等待完整性校验", icon: "terminal", tint: store.snapshot.libTVVerified ? .green : .orange)
