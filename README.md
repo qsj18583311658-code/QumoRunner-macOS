@@ -13,14 +13,15 @@ Qumo Runner 是面向 macOS 14+ / Apple Silicon 的原生 Runner 运维客户端
 - Apple Silicon Mac，macOS 14 或更新版本
 - 完整 Xcode 16 或更新版本（仅安装 Command Line Tools 不足以构建 `.app`）
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)：`brew install xcodegen`
-- 已核验的 LibTV CLI 1.0.2 ARM64 构建输入。默认读取 `/Users/qumo/.libtv/libtv`，也可通过 `QUMO_LIBTV_SOURCE` 指定绝对路径；56 MB 二进制不提交到仓库。
+- 已核验的 LibTV CLI 1.0.2 ARM64 构建输入。默认读取 `$HOME/.libtv/libtv`，也可通过 `QUMO_LIBTV_SOURCE` 指定绝对路径；56 MB 二进制不提交到仓库。该文件必须是固定校验和的 1.0.2，不能直接使用已自助升级的当前 CLI。
 
 ## 生成与构建
 
 ```bash
-cd apps/canvas-runner-macos
+cd /path/to/QumoRunner-macOS
 ./Scripts/generate-project.sh
-xcodebuild -project QumoRunner.xcodeproj \
+QUMO_LIBTV_SOURCE='/absolute/path/to/verified/libtv-1.0.2' \
+  xcodebuild -project QumoRunner.xcodeproj \
   -scheme QumoRunner \
   -configuration Debug \
   -destination 'platform=macOS,arch=arm64' \
@@ -92,9 +93,23 @@ Agent 为新租约保留 8 秒提交前窗口。窗口内取消由 `RunnerEngine
 把二进制嵌入 App 前执行：
 
 ```bash
-./Scripts/verify-bundled-libtv.sh /Users/qumo/.libtv/libtv \
+./Scripts/verify-bundled-libtv.sh "$HOME/.libtv/libtv" \
   8605ff53e9f2185f09ba59597ba811e12d90294411ae15710e334be56a4d6e34
 ```
+
+如果 `$HOME/.libtv/libtv` 已是更新版本，请将从旧 App Bundle 或官方版本化 ZIP 获得的已验证 1.0.2 放在独立路径，并在构建时指定：
+
+```bash
+QUMO_LIBTV_SOURCE='/absolute/path/to/verified/libtv-1.0.2' \
+  xcodebuild -project QumoRunner.xcodeproj \
+  -scheme QumoRunner \
+  -configuration Debug \
+  -destination 'platform=macOS,arch=arm64' \
+  DEVELOPMENT_TEAM='<TEAM_ID>' \
+  CODE_SIGN_IDENTITY='Apple Development' build
+```
+
+不要从旧 Mac 复制 Keychain 设备 Token、`credentials.json`、Chrome 数据、本地 SQLite 或 Runtime 激活状态。新 Mac 应使用 Qumo 管理后台生成的单次配对码，并为每个 LibTV Profile 重新执行 Chrome 授权。Runner 只通过 HTTPS 连接 Canvas API，运行时不需要云服务器 SSH 私钥。
 
 脚本会校验当前架构、固定 SHA-256、严格代码签名与版本字符串 `1.0.2`。Agent 启动时还会调用 `RunnerCore.LibTVBinaryVerifier` 重复校验；任何一项失败都会进入 `degraded`、禁止登录与 Claim。LibTV 只能通过绝对路径与 `Process.arguments` 启动，禁止使用 shell 或依赖 `PATH`。
 
@@ -103,14 +118,15 @@ Agent 为新租约保留 8 秒提交前窗口。窗口内取消由 `RunnerEngine
 运行构建与 Agent 纯解析测试：
 
 ```bash
-xcodebuild -project QumoRunner.xcodeproj \
+QUMO_LIBTV_SOURCE='/absolute/path/to/verified/libtv-1.0.2' \
+  xcodebuild -project QumoRunner.xcodeproj \
   -scheme QumoRunner \
   -configuration Debug \
   -destination 'platform=macOS,arch=arm64' \
   CODE_SIGNING_ALLOWED=NO test
 ```
 
-当前代码已通过 Xcode 16.4、macOS 15.5 SDK、Swift 6 严格并发的完整 Debug 构建；RunnerCore 48 项测试以及 Agent/App 30 项测试全部通过。当前 Mac 已完成可信开发签名安装、`SMAppService` 拉起、旧 Profile 账号标识迁移和真实 Liblib 套餐/积分手动刷新验证；多账号并行与 72 小时故障验收仍需在专用 Mac mini 持续执行。
+当前代码已通过 Xcode 16.4、macOS 15.5 SDK、Swift 6 严格并发的完整 Debug 构建；RunnerCore 103 项测试以及 Agent/App 42 项测试全部通过。当前 Mac 已完成可信开发签名安装、`SMAppService` 拉起、旧 Profile 账号标识迁移和真实 Liblib 套餐/积分手动刷新验证；多账号并行与 72 小时故障验收仍需在专用 Mac mini 持续执行。
 
 ## CLI 兼容与升级
 
@@ -119,10 +135,10 @@ xcodebuild -project QumoRunner.xcodeproj \
 拿到新版本后，先对已下载、可信的可执行文件运行只读检查：
 
 ```bash
-swift run --package-path apps/canvas-runner-macos libtv-contract-check /absolute/path/to/libtv
+swift run --package-path . libtv-contract-check /absolute/path/to/libtv
 ```
 
-以上命令从仓库根目录运行，只调用 `--version` 和各命令的 `--help`，使用临时 HOME，输出版本、SHA-256、适配器 ID 和标准化命令指纹。它不改变本机版本，不登录或生成媒体，也不代替官方签名验证。语法不匹配时返回失败。回归样本 `Tests/RunnerCoreTests/Resources/cli-contract-*.json` 采集自实际的 1.0.2 和 1.1.3 二进制，包含对应 SHA-256；不代表这些版本都已获生产批准。
+以上命令从 Runner 仓库根目录运行，只调用 `--version` 和各命令的 `--help`，使用临时 HOME，输出版本、SHA-256、适配器 ID 和标准化命令指纹。它不改变本机版本，不登录或生成媒体，也不代替官方签名验证。语法不匹配时返回失败。回归样本 `Tests/RunnerCoreTests/Resources/cli-contract-*.json` 采集自实际的 1.0.2 和 1.1.3 二进制，包含对应 SHA-256；不代表这些版本都已获生产批准。
 
 升级顺序：
 

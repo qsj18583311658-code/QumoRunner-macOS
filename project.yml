@@ -124,7 +124,7 @@ targets:
           set -euo pipefail
           LIBTV_SOURCE="$(/usr/bin/printenv QUMO_LIBTV_SOURCE 2>/dev/null || true)"
           if [[ -z "${LIBTV_SOURCE}" ]]; then
-            LIBTV_SOURCE="/Users/qumo/.libtv/libtv"
+            LIBTV_SOURCE="$(/usr/bin/printenv HOME)/.libtv/libtv"
           fi
           EXPECTED_SHA="8605ff53e9f2185f09ba59597ba811e12d90294411ae15710e334be56a4d6e34"
           "${PROJECT_DIR}/Scripts/verify-bundled-libtv.sh" "${LIBTV_SOURCE}" "${EXPECTED_SHA}"

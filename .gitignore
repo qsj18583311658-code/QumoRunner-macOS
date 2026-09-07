@@ -1,0 +1,21 @@
+.DS_Store
+.build/
+DerivedData/
+build/
+*.xcarchive
+*.dSYM
+*.app
+*.p12
+*.pem
+*.mobileprovision
+*.xcuserstate
+xcuserdata/
+
+# Runtime and device state must never enter source control.
+Runtimes/
+Profiles/
+credentials.json
+runner-config.json
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
