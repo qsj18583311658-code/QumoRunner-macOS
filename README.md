@@ -118,6 +118,8 @@ QUMO_LIBTV_SOURCE='/absolute/path/to/verified/libtv-1.0.2' \
 运行构建与 Agent 纯解析测试：
 
 ```bash
+swift test --no-parallel
+
 QUMO_LIBTV_SOURCE='/absolute/path/to/verified/libtv-1.0.2' \
   xcodebuild -project QumoRunner.xcodeproj \
   -scheme QumoRunner \
@@ -125,6 +127,8 @@ QUMO_LIBTV_SOURCE='/absolute/path/to/verified/libtv-1.0.2' \
   -destination 'platform=macOS,arch=arm64' \
   CODE_SIGNING_ALLOWED=NO test
 ```
+
+`--no-parallel` 是子进程时序测试的一部分：Xcode 26 的 Swift Testing 并行调度会同时启动大量假 LibTV 进程，可能在机器负载下触发测试看门狗并产生误报。
 
 当前代码已通过 Xcode 16.4、macOS 15.5 SDK、Swift 6 严格并发的完整 Debug 构建；RunnerCore 103 项测试以及 Agent/App 42 项测试全部通过。当前 Mac 已完成可信开发签名安装、`SMAppService` 拉起、旧 Profile 账号标识迁移和真实 Liblib 套餐/积分手动刷新验证；多账号并行与 72 小时故障验收仍需在专用 Mac mini 持续执行。
 
