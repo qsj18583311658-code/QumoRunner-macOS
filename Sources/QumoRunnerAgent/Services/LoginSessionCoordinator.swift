@@ -156,7 +156,11 @@ final class LoginSessionCoordinator: @unchecked Sendable {
     }
 
     private func inspectAccount(profile: RunnerProfile, paths: ProfilePaths) async {
-        let runner = LibTVProcessRunner(executableURL: AgentBundleLayout.libTVExecutableURL, homeURL: paths.home, defaultTimeout: .seconds(60))
+        let runner = LibTVProcessRunner(
+            executableURL: AgentBundleLayout.libTVExecutableURL,
+            homeURL: paths.home,
+            defaultTimeout: LibTVProcessTimeoutPolicy.metadata
+        )
         var lastFailure = AgentProfileRegistryError.unresolvedAccount.localizedDescription
         for attempt in 0..<5 {
             do {

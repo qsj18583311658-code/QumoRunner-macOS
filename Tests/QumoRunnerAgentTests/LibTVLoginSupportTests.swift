@@ -1,6 +1,11 @@
 import XCTest
 
 final class LibTVLoginSupportTests: XCTestCase {
+    func testGenerationTimeoutIsNotInheritedFromShortMetadataCommands() {
+        XCTAssertEqual(LibTVProcessTimeoutPolicy.metadata, .seconds(60))
+        XCTAssertEqual(LibTVProcessTimeoutPolicy.generation, .seconds(30 * 60))
+    }
+
     func testParsesNumericAccountIDAndAccountNameFromCLIInfo() {
         let metadata = LibTVAccountMetadataParser.parse(
             output: #"prefix {"user":{"nickname":"用户昵称"},"activeAccount":{"accountId":5001033,"accountName":"趣摩AI"}} suffix"#,

@@ -1,5 +1,14 @@
 import Foundation
 
+enum LibTVProcessTimeoutPolicy {
+    // Metadata commands should fail quickly so a broken login cannot stall the agent loop.
+    static let metadata: Duration = .seconds(60)
+
+    // `libtv node --run` is synchronous and may legitimately wait for a remote image or video.
+    // Keep this separate from metadata timeouts: profile runners are also reused for generation.
+    static let generation: Duration = .seconds(30 * 60)
+}
+
 struct LibTVAccountMetadata: Equatable, Sendable {
     let accountRef: String
     let displayName: String

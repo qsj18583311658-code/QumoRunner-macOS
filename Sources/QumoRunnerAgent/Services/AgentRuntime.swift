@@ -572,7 +572,11 @@ actor AgentRuntime {
         }
         for profile in profiles {
             let paths = try profileRegistry.prepare(profileRef: profile.profileRef).1
-            let runner = profileRunners[profile.profileRef] ?? LibTVProcessRunner(executableURL: activeRuntime.executableURL, homeURL: paths.home)
+            let runner = profileRunners[profile.profileRef] ?? LibTVProcessRunner(
+                executableURL: activeRuntime.executableURL,
+                homeURL: paths.home,
+                defaultTimeout: LibTVProcessTimeoutPolicy.generation
+            )
             profileRunners[profile.profileRef] = runner
             await insights.register(profile: profile, runner: runner)
             let executor = ProfileExecutor(profileRef: profile.profileRef, runner: runner, limiter: limiter)
@@ -596,7 +600,11 @@ actor AgentRuntime {
             do {
                 let paths = try profileRegistry.prepare(profileRef: profile.profileRef).1
                 let runner = profileRunners[profile.profileRef]
-                    ?? LibTVProcessRunner(executableURL: activeRuntime.executableURL, homeURL: paths.home, defaultTimeout: .seconds(60))
+                    ?? LibTVProcessRunner(
+                        executableURL: activeRuntime.executableURL,
+                        homeURL: paths.home,
+                        defaultTimeout: LibTVProcessTimeoutPolicy.generation
+                    )
                 profileRunners[profile.profileRef] = runner
                 let result = try await runner.run(arguments: ["account", "info"])
                 guard result.exitCode == 0 else { continue }
